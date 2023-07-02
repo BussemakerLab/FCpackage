@@ -1,0 +1,7 @@
+"0","proBound_files <- list.files(proBound_runDIR)"
+"0","modelFile_Template <- paste0(proBound_runDIR, '$modelFile$/result/fit.models.consensus.json')"
+"0","rows <- c(""A"", ""C"", ""G"", ""T"")"
+"0","blank <- data.frame(P00 = c(1,1,1,1), P0 = c(1,1,1,1))"
+"0",""
+"0","#getting expeirment identifier from bHLH_info, may vary according to different naming scheme"
+"0","bHLH_index <- bHLH_info[,1:2]"

@@ -1,0 +1,1 @@
+"0","legend( x = ""bottomright"", legend = c('A', 'C', 'G', 'T'), col =c('green','blue','orange','red'), pch = 19, bty='n')"

@@ -1,0 +1,186 @@
+####creat consensus files ####
+consensusTemplate <- 'pb consensus $factor_ids$.json'
+bashFile <- 'E:/Desktop/HB_Rotation_1/Hemeo_domain_test/multi_digit_fits/bash.sh'
+files <- list.files('E:/Desktop/HB_Rotation_1/Hemeo_domain_test/multi_digit_fits')
+factor_ids <- gsub('.json','',files)
+
+cat("#!/bin/bash\n", file = bashFile, sep = "\n", append = F)
+for(i in 1:length(factor_ids)){
+  cat(gsub('\\$factor_ids\\$', factor_ids[i],consensusTemplate), file = bashFile, sep = "\n",append = T)
+
+}
+modelfile <- 'E:/Desktop\\HB_Rotation_1\\Hemeo_domain_test\\new_fits\\1007_15414.consensus.json'
+JSON <- readLines(modelfile)
+JSON_matrix <- JSON2Matrix(JSON_text = JSON, expo = exp(1), mode = 1)
+
+####align consensus matrixes####
+names <- c()
+for(i in 1:length(listOfEle)){
+  names <- c( names, listOfEle[[i]]$name)
+}
+
+namesSplit <- strsplit(names, '_')
+monoIndex <- c()
+for(i in 1:length(namesSplit)){
+  if(as.numeric(namesSplit[[i]][1]) < 10000){
+    print(as.numeric(namesSplit[[i]][1]))
+    monoIndex <- c(monoIndex, i)
+  }
+}
+
+monoMatrix <- listOfEle[monoIndex]
+
+names <- c()
+for(i in 1:length(monoMatrix)){
+  names <- c(names, monoMatrix[[i]]$name)
+}
+
+#form max 8mer table####
+factor <- c()
+fit <- c()
+kmer <- c()
+score <- c()
+for(i in 1:length(names)){
+  name <- strsplit(monoMatrix[[i]]$name, '_')
+  factor <- c(factor, name[[1]][1])
+  fit <- c(fit, name[[1]][2])
+  mek <- mostEnrichedKmer(monoMatrix[[i]]$matrix,8)
+  kmer <- c(kmer, mek$kmer)
+  score <- c(score, mek$score)
+}
+kmerTable <- data.frame(factor, fit, kmer, score)
+
+factors <- unique(kmerTable$factor)
+kmerTableFiltered <- data.frame(NULL)
+for(i in factors){
+  ktf <- kmerTable[kmerTable$factor == i,]
+  kmerTableFiltered <- rbind.data.frame(kmerTableFiltered, ktf[ktf$score == max(ktf$score),])
+}
+
+#find position of TAAT####
+factor <- c()
+fit <- c()
+TAATpos <- c()
+TAATscore <- c()
+ATTApos <- c()
+ATTAscore <- c()
+for(i in 1:length(names)){
+  name <- strsplit(monoMatrix[[i]]$name, '_')
+  factor <- c(factor, name[[1]][1])
+  fit <- c(fit, name[[1]][2])
+  TAAT <- findKmerPos(motifMatrix = monoMatrix[[i]]$matrix, 'TAAT', weight = c(1,1,3,1))
+  ATTA <- findKmerPos(motifMatrix = monoMatrix[[i]]$matrix, 'ATTA', weight = c(1,3,1,1))
+  TAATpos <- c(TAATpos, TAAT$startPos)
+  ATTApos <- c(ATTApos, ATTA$startPos)
+  TAATscore <- c(TAATscore, TAAT$score)
+  ATTAscore <- c(ATTAscore, ATTA$score)
+}
+kmerTable <- data.frame(factor, fit, TAATpos, TAATscore, ATTApos, ATTAscore)
+
+
+factors <- unique(kmerTable$factor)
+kmerTableFiltered <- data.frame(NULL)
+for(i in factors){
+  ktf <- kmerTable[kmerTable$factor == i,]
+  TAATmax <- ktf[ktf$TAATscore == max(ktf$TAATscore),]
+  ATTAmax <- ktf[ktf$ATTAscore == max(ktf$ATTAscore),]
+  if(TAATmax$TAATscore > ATTAmax$ATTAscore){
+    kmerTableFiltered <- rbind.data.frame(kmerTableFiltered, TAATmax)
+  }else{
+    kmerTableFiltered <- rbind.data.frame(kmerTableFiltered, ATTAmax)
+  }
+}
+write.csv2(kmerTableFiltered, file = 'E:/Desktop\\HB_Rotation_1\\Hemeo_domain_test/kmerTable.csv')
+
+
+#modify newAlignment to pfam alignment####
+gregexpr('RKKR',newAlignment$alignmented_residues[5])
+grep('MKWKR', newAlignment$alignmented_residues)
+gregexpr('MKWKR',newAlignment$alignmented_residues[146])
+newAlignment$alignmented_residues <- substr(newAlignment$alignmented_residues, 1317, 1405)
+nchar(newAlignment$alignmented_residues[1])
+
+#manova test
+manovaPval <- matrix(data = 0, nrow = 89, ncol = 8)
+for(j in 1:8){
+  for(i in 1:89){
+    posMatrix <- matrix(nrow = 4, ncol = nrow(newAlignment), data = 0)
+    for(sample in 1:length(filterListOfEle)){
+      posMatrix[,sample] <- filterListOfEle[[sample]]$matrix[,j]
+    }
+    posTetra <- matrix2tetrahedron(posMatrix)
+    posTetra <- cbind(posTetra, substr(newAlignment$alignmented_residues, i,i))
+    colnames(posTetra) <- c('X', 'Y', 'Z', 'AA')
+    posTetra <- posTetra[posTetra[,1] != 'NaN',]
+    #tetrahedron
+    posMatrix <- as.data.frame(posMatrix)
+    colnames(posMatrix) <- newAlignment$gene_symbol
+    posMatrix <- exp(posMatrix)
+    rownames(posMatrix) <- c('A','C','G','T')
+    plot_tetrahedron(posMatrix)
+    #end of tetrahedron
+    posTetra <- as.data.frame(posTetra)
+    posTetra$AA <- as.factor(posTetra$AA)
+    posTetra[1:3] <- lapply(posTetra[1:3],  as.numeric)
+    man.test <- manova(cbind(posTetra$X,posTetra$Y,posTetra$Z) ~ posTetra$AA, data = posTetra)
+    summary <- summary(man.test, tol=0)
+    p.val <- summary$stats[1,6]
+    manovaPval[i,j] <- p.val
+  }
+}
+manovaPval <- -log(manovaPval,10)
+colnames(manovaPval) <- c('P-2', 'P-2', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6')
+gplots::heatmap.2(manovaPval,dendrogram='none',
+                  Rowv=FALSE, Colv=FALSE,trace='none',col = rev(heat.colors(12)), key.title = '-logPval')
+
+
+
+
+
+####functions####
+mostEnrichedKmer <- function(motifMatrix, k = 6){
+  if(ncol(motifMatrix) < k){
+    print('matrix shorter than k')
+    return(list(kmer = '', score = -1))
+  }
+  m <- apply(motifMatrix, 2, function(column) column - mean(column))
+  max <- 0
+  startPos <- 0
+  for(i in 1:(ncol(m) - k + 1)){
+    sum <- 0
+    for(j in i:(i+k-1)){
+      sum <- sum + max(m[,j])
+    }
+    if(sum > max){
+      max <- sum
+      startPos <- i
+    }
+  }
+  kmer <- ''
+  for(i in 1:k){
+    kmer <- paste0(kmer, rownames(m)[which(m[,i+startPos-1] == max(m[,i+startPos-1]))])
+  }
+  return(list(kmer = kmer, score = max))
+}
+
+findKmerPos <- function(motifMatrix, kmer = 'ATTA', weight = c(1,1,1,1)){
+  if(ncol(motifMatrix) < length(kmer)){
+    print('matrix shorter than k')
+    return(list(startPos = 0, score = -1))
+  }
+  m <- apply(motifMatrix, 2, function(column) column - mean(column))
+  max <- 0
+  startPos <- 0
+  k <- nchar(kmer)
+  for(i in 1:(ncol(m) - k + 1)){
+    sum <- 0
+    for(j in 1:k){
+      sum <- sum + weight[j] * m[which(substr(kmer,j,j)== rownames(m)),j+i-1]
+    }
+    if(sum > max){
+      max <- sum
+      startPos <- i
+    }
+  }
+  return(list(startPos = startPos, score = max))
+}

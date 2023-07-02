@@ -1,0 +1,759 @@
+####Amino acid feature table####
+AA <- c('A','C','D','E','F','G','H','I','K','L','M','N','P','Q','R','S','T','V','W','Y','-')
+Hydropathy <- c(1.8, 2.5, -3.5, -3.5, 2.8, -0.4, -3.2, 4.5, -3.9, 3.8, 1.9, -3.5, -1.6, -3.5, -4.5, -0.8, -0.7, 4.2, -0.9, -1.3, 0)
+Volumn <- c(88.6, 108.5,111.1, 138.4, 189.9, 60.1, 153.2, 166.7, 168.6, 166.7, 162.9, 114.1, 112.7, 143.8,
+            173.4, 89.0, 116.1, 140.0, 227.8, 193.9, 141.275)
+PI <- c(6.11, 5.15, 2.98, 3.08, 5.76, 6.06, 7.64, 6.04, 9.47, 6.04, 5.71, 5.43, 6.30, 5.65, 10.76, 5.70,
+        5.60, 6.02, 5.88, 5.63, 6.0505)
+
+AAfeature <- data.frame(Hydropathy, Volumn, PI)
+rownames(AAfeature) <- AA
+for(i in 1:ncol(AAfeature)){
+  AAfeature[,i] <- (AAfeature[,i] - mean(AAfeature[,i]))/sd(AAfeature[,i])
+}
+
+
+
+
+plotAA <- plot_ly(AAfeature, x = AAfeature[,1],
+                  y=AAfeature[,2],z=AAfeature[,3], text = row.names(AAfeature))%>%
+  add_trace(color = I('blue'),
+            type = 'scatter3d',
+            mode = 'markers',
+            opacity = 0.5,
+            name = 'AA',
+            size = 0.5)%>%
+  add_text(opacity = 0.5)%>%
+  layout(scene = list(xaxis = list(title = 'Hydropathy'), 
+         yaxis = list(title = 'Volumn'),
+         zaxis = list(title = 'PI')))
+plotAA
+
+bHLH_motifs
+bHLH_pbAlignment
+
+
+
+####ddG table####
+keyPos = c(13,14,5,8,26)
+ddGFeature <- form.ddGFeatureList(bHLH_motifs = bHLH_motifs_backup, bHLH_pbAlignment = bHLH_pbAlignment_backup, leaveOut = c('TFEB'), keyPos = keyPos)
+
+####predict with svd####
+
+targetSequence <- bHLH_pbAlignment_backup[bHLH_pbAlignment_backup $name == "TFEB_Jolma2013", 2]
+
+PredM <- predEigen(targetSequence, ddGFeature, print.dist = T, keyPos = keyPos)
+
+
+TrueM <- unlist(data.frame(apply(log(TrueMatrix), 2, function(column) column - mean(column))))
+
+plot(TrueM, unlist(PredM))
+mean((TrueM-unlist(PredM))^2)^(1/2)
+dt <- data.frame(PredM = unlist(PredM), TrueM)
+summary(lm(PredM~TrueM, dt))
+
+####mass validation of svd prediction####
+####pair-wise HT selex prediction validation####
+posMotif <- 'P-1'
+
+ProteinPos <- data.frame(name = bHLH_pbAlignment$name, pos = substr(bHLH_pbAlignment$alignment,AApos,AApos))
+PosAA <- c()
+for(i in 1:length(bHLH_motifs)){
+  PosAA <- c(PosAA, ProteinPos[ProteinPos$name == bHLH_motifs[[i]]$name, 2])
+}
+pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+
+geneList <- strsplit(colnames(pos_matrix), '_')
+geneNames <- c()
+for(i in 1:length(geneList)){
+  geneNames <- c(geneNames, geneList[[i]][1])
+}
+geneNames <- unique(geneNames)
+
+predList <- c()
+TrueList <- c()
+keyPos = c(13,14,5,8,26)
+test.no <- 62
+#toPs <- sample(1:length(geneNames), test.no)
+for(a in 1:test.no){
+  j <- toPs[a]
+  pTo <- grep(geneNames[j], colnames(pos_matrix))[1]
+  entryTo <- colnames(pos_matrix)[pTo]
+  targetMatrix <- data.frame(pos_matrix[,entryTo])
+  targetSequence <- bHLH_pbAlignment[bHLH_pbAlignment$name == entryTo,2]
+  dddGList <- form.ddGFeatureList(bHLH_pbAlignment, bHLH_motifs, leaveOut = c(geneNames[j]), keyPos = keyPos)
+  predictedMatrix <- predEigen(targetSequence, dddGList, motifPos = 'P-1', keyPos = keyPos, distType = 'Angular', singularity = 'all')
+  predList <- c(predList, unlist(predictedMatrix))
+  TrueList <- c(TrueList, unlist(data.frame(apply(log(targetMatrix), 2, function(column) column - mean(column)))))
+}
+
+dt <- data.frame(TrueList, predList)
+plot(TrueList, predList, main = 'Pair-wise prediction test', xlab = 'Experiment ????G', ylab = 'Predicted ????G')
+summary(lm(predList~TrueList, dt))
+mean((TrueList-predList)^2)^(1/2)
+
+
+####test prediction with Eigenpred####
+keyPos = c(13,14,5,8,26)
+dddGList <- form.ddGFeatureList(bHLH_pbAlignment, bHLH_motifs, leaveOut = c(), keyPos = keyPos)
+modMotifH5P.1 <- predEigen('-KSLRPLLEKRRRARINQSLSQLKGLI-L------PLLGRENS--NCSKLEKADVL', dddGList, motifPos = 'P-1', keyPos = keyPos, distType = 'Euclidean', singularity = 'one')
+modMotifH13P.1 <- predEigen('-KSLKPLLEKRRVARINQSLSQLKGLI-L------PLLGRENS--NCSKLEKADVL', dddGList, motifPos = 'P-1', keyPos = keyPos, distType = 'Euclidean', singularity = 'one')
+modMotifHDP.1 <- predEigen('-KSLRPLLEKRRVARINQSLSQLKGLI-L------PLLGRENS--NCSKLEKADVL', dddGList, motifPos = 'P-1', keyPos = keyPos, distType = 'Euclidean', singularity = 'one')
+modMotifH5P1 <- predEigen('-KSLRPLLEKRRRARINQSLSQLKGLI-L------PLLGRENS--NCSKLEKADVL', dddGList, motifPos = 'P1', keyPos = keyPos, distType = 'Euclidean', singularity = 'one')
+modMotifH13P1 <- predEigen('-KSLKPLLEKRRVARINQSLSQLKGLI-L------PLLGRENS--NCSKLEKADVL', dddGList, motifPos = 'P1', keyPos = keyPos, distType = 'Euclidean', singularity = 'one')
+modMotifHDP1 <- predEigen('-KSLRPLLEKRRVARINQSLSQLKGLI-L------PLLGRENS--NCSKLEKADVL', dddGList, motifPos = 'P1', keyPos = keyPos, distType = 'Euclidean', singularity = 'one')
+
+modMotifA5P.1 <- predEigen('-VARKNERERNRVKLVNLGFQALRQHV-P------HGG-------ASKKLSKVETL', dddGList, motifPos = 'P-1', keyPos = keyPos, distType = 'Euclidean', singularity = 'one')
+modMotifA13P.1 <- predEigen('-VARRNERERNRRKLVNLGFQALRQHV-P------HGG-------ASKKLSKVETL', dddGList, motifPos = 'P-1', keyPos = keyPos, distType = 'Euclidean', singularity = 'one')
+modMotifADP.1 <- predEigen('-VARKNERERNRRKLVNLGFQALRQHV-P------HGG-------ASKKLSKVETL', dddGList, motifPos = 'P-1', keyPos = keyPos, distType = 'Euclidean', singularity = 'one')
+modMotifA5P1 <- predEigen('-VARKNERERNRVKLVNLGFQALRQHV-P------HGG-------ASKKLSKVETL', dddGList, motifPos = 'P1', keyPos = keyPos, distType = 'Euclidean', singularity = 'one')
+modMotifA13P1 <- predEigen('-VARRNERERNRRKLVNLGFQALRQHV-P------HGG-------ASKKLSKVETL', dddGList, motifPos = 'P1', keyPos = keyPos, distType = 'Euclidean', singularity = 'one')
+modMotifADP1 <- predEigen('-VARKNERERNRRKLVNLGFQALRQHV-P------HGG-------ASKKLSKVETL', dddGList, motifPos = 'P1', keyPos = keyPos, distType = 'Euclidean', singularity = 'one')
+
+predTable <- cbind.data.frame(modMotifH5P.1, modMotifH13P.1, modMotifHDP.1, 
+                              modMotifH5P1, modMotifH13P1, modMotifHDP1, 
+                              modMotifA5P.1, modMotifA13P.1, modMotifADP.1,
+                              modMotifA5P1, modMotifA13P1, modMotifADP1)
+rownames(predTable) = c('A','C', 'G', 'T')
+
+mononucleotide_logo(predTable[,])
+trueTable <- cbind.data.frame(SELEX_motifs$H5$`P-1`, SELEX_motifs$H13$`P-1`, SELEX_motifs$HD$`P-1`,
+                              SELEX_motifs$H5$`P1`, SELEX_motifs$H13$`P1`, SELEX_motifs$HD$`P1`,
+                              SELEX_motifs$A5$`P-1`, SELEX_motifs$A13$`P-1`, SELEX_motifs$AD$`P-1`,
+                              SELEX_motifs$A5$`P1`, SELEX_motifs$A13$`P1`, SELEX_motifs$AD$`P1`)
+rownames(trueTable) = c('A','C', 'G', 'T')
+
+predAD <- SELEX_motifs$AD
+predAD$P.1 <- modMotifADP.1
+predAD$P1 <- modMotifADP1
+mononucleotide_logo(predAD)
+
+#plot correlation 
+pred <- unlist(data.frame(apply(predTable, 2, function(column) column - mean(column))))
+true <- unlist(data.frame(apply(trueTable, 2, function(column) column - mean(column))))
+
+#predTable2 <- apply(predTable, 2, function(column) if(min(column) < 0){column + abs(min(column)) + 0.01}else{column})
+#predTable2 <- apply(predTable2, 2, function(column) column / max(column))
+
+#pred <- unlist(data.frame(matrix2tetrahedron(predTable2)))
+#true <- unlist(data.frame(matrix2tetrahedron(trueTable)))
+
+
+#pred <- unlist(data.frame(predTable))
+#true <- unlist(data.frame(trueTable))
+#plot_tetrahedron(trueTable)
+#plot_tetrahedron(predTable2)
+
+predTrue <- data.frame(pred, true)
+
+plot(true,pred, col = c(rep(1, length(pred)/2), rep(2,length(pred)/2)))
+lm <- lm(true~pred+0, predTrue)
+summary(lm)
+mean((pred-true)^2)^(1/2)
+
+
+####svd whole population ANOVA####
+posMotif <- 'P-1'
+pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+alignment <- data.frame(NULL)
+for(i in 1:ncol(pos_matrix)){
+  alignment <- rbind.data.frame(alignment, bHLH_pbAlignment[bHLH_pbAlignment$name == colnames(pos_matrix)[i],])
+}
+#plot pos_matrix
+dist <- dist(t(pos_matrix))
+cluster <- hclust(dist)
+
+cluster_matrix <- t(pos_matrix[,cluster$order])
+
+names <- c()
+for(i in 1:nrow(cluster_matrix)){
+  name <- strsplit(rownames(cluster_matrix)[i], '_')[[1]][1]
+  names<- c(names, name)
+}
+rownames(cluster_matrix) <- names
+gplots::heatmap.2(cluster_matrix,dendrogram='none',
+                  Rowv=FALSE, Colv=FALSE,trace='none',col = hcl.colors(50), key.title = '')
+
+tetra_matrix <- matrix2tetrahedron(t(cluster_matrix))
+tetra_means <- apply(tetra_matrix, 2,function(x) mean(x))
+tetra_matrix <- apply(tetra_matrix, 2,function(x) x-mean(x))
+
+gplots::heatmap.2(as.matrix(as.data.frame(tetra_matrix)),dendrogram='none',
+                  Rowv=FALSE, Colv=FALSE,trace='none',col = hcl.colors(50), key.title = '')
+
+svd <- svd(tetra_matrix)
+svdShow <- svd$u
+rownames(svdShow) <- names
+gplots::heatmap.2(as.matrix(as.data.frame(svdShow)),dendrogram='none',
+                  Rowv=FALSE, Colv=FALSE,trace='none',col = hcl.colors(50), key.title = '')
+
+svd.aov <- matrix(nrow = 3, ncol = 55, data = 0)
+
+i = 1
+j = 13
+for(i in 1:3){
+  for(j in 1:55){
+    u1 <- svd$u[,i]
+    aa <- substr(alignment$alignment,j,j)
+    dt <- cbind.data.frame(aa,u1)
+    boxplot(u1~aa,dt)
+    if(length(unique(aa)) == 1){
+      next()
+    }
+    aov <- aov(u1~aa,dt)
+    svd.aov[i,j] <- summary(aov)[[1]][[5]][1]
+    
+  }
+}
+
+svd.aov.pval <- -log(svd.aov,10)
+svd.aov.pval[svd.aov.pval == Inf] <- 0
+
+plot(svd.aov.pval[1,], pch = 1, col = "red", type = 'l', lwd = 1.5, xlab = 'AA Position', ylab = '-log p-val', main = 'Principle Componant-AA position Association')
+lines(svd.aov.pval[2,], pch = 1, col = "green", lwd = 1.5)
+lines(svd.aov.pval[3,], pch = 1, col = "blue", lwd = 1.5)
+lines(pVal.Pos$`P-1`)
+legend(l, x = "topright", legend = c('PC1', 'PC2', 'PC3'), lwd = 1.5, col =c('red','green','blue'), lty=1, cex = 0.8, bty = 'n')
+
+svd.pvalTable <- data.frame(t(svd.aov.pval))
+svd.pvalTable$name <- c(1:55)
+
+svd.pvalTable <- svd.pvalTable[svd.pvalTable$X1 < 100,]
+
+
+
+
+reSvd <- svd$u %*% diag(svd$d) %*% t(svd$v)
+mean((reSvd - tetra_matrix)^2)^(1/2)
+
+uReduced <- svd$u
+uReduced[,c(1)] <- 0
+reSvd <- uReduced %*% diag(svd$d) %*% t(svd$v)
+mean((reSvd - tetra_matrix)^2)^(1/2)
+
+
+alignment_backup <- alignment
+####svd prediction framework####
+
+preditionPower <- data.frame(NULL)
+coeffs <- list()
+for(fn in 1:10){
+  nfeature <- fn
+  X1feature <- dplyr::arrange(svd.pvalTable, desc(X1))[1:nfeature, 'name']
+  X2feature <- dplyr::arrange(svd.pvalTable, desc(X2))[1:nfeature, 'name']
+  X3feature <- dplyr::arrange(svd.pvalTable, desc(X3))[1:nfeature, 'name']
+  
+  
+  
+  
+  trueList <- c()
+  predList <- c()
+  keyPos <- list(X1feature,X2feature,X3feature)
+  #keyPos <- c(45,fn)
+  coefTable <- data.frame(NULL)
+  for(interation in 1:nrow(alignment_backup)){
+    alignment <- alignment_backup[-interation,]
+    svd <- svd(tetra_matrix[-interation,])
+    
+    #average list
+    uList <- list()
+    for(i in 1:3){
+      rowList <- list()
+      for(j in keyPos[[i]]){
+        u1 <- svd$u[,i]
+        aa <- substr(alignment$alignment,j,j)
+        dt <- cbind.data.frame(aa,u1)
+        aas <- unique(dt$aa)
+        means <- c()
+        for(a in aas){
+          subDt <- dt[dt$aa == a,]
+          means <- c(means, mean(subDt$u1))
+        }
+        meanDt <- data.frame(aa = aas, mean = means)
+        rowList[[j]] <- meanDt
+      }
+      uList[[i]] <- rowList
+    }
+    
+    #synthetic U matrix
+    synUList <- list()
+    for(ali in 1:nrow(alignment)){
+      synU <- list()
+      for(i in 1:3){
+        addList <- c()
+        for(j in keyPos[[i]]){
+          aa <- substr(alignment$alignment[ali],j,j)
+          uset <- uList[[i]][[j]]
+          add <- uset[uset$aa == aa, 2]
+          addList <- c(addList, add)
+        }  
+        synU[[i]] <- addList
+      }
+      synUList[[ali]] <- synU
+    }
+    
+    #get linear regression coefficients
+    synUpred <- list()
+    coefList <- list()
+    for(uindex in 1:3){
+      synthesizedU <- matrix(nrow = nrow(alignment), ncol = length(keyPos[[1]]))
+      for(i in 1:nrow(alignment)){
+        synthesizedU[i,] <- synUList[[i]][[uindex]]
+      }
+      synthesizedU <- data.frame(synthesizedU)
+      synthesizedU$label <- svd$u[,uindex]
+      lm <- lm(label~., synthesizedU)
+      summary(lm)
+      
+      coef <- lm$coefficients
+      coef[is.na(coef)] <- 0
+      coefList[[uindex]] <- coef
+      
+      newU <- c()
+      for(i in 1:nrow(alignment)){
+        add <- sum(synthesizedU[i,1:length(keyPos[[uindex]])]*coef[1:length(keyPos[[uindex]])+1]) + coef[1]
+        newU <- c(newU,add)
+      }
+      synUpred[[uindex]] <- newU
+    }
+    
+    
+    Upred <- matrix(nrow = nrow(alignment), ncol = 3)
+    for(i in 1:3){
+      Upred[,i] <- synUpred[[i]]
+    }
+    
+    reSvd <- Upred %*% diag(svd$d) %*% t(svd$v)
+    print(RMSD(reSvd, tetra_matrix[-interation,]))
+    
+    #test
+    ali <- interation
+    synUtest <- list()
+    for(i in 1:3){
+      addList <- c()
+      for(j in keyPos[[i]]){
+        aa <- substr(alignment_backup$alignment[ali],j,j)
+        uset <- uList[[i]][[j]]
+        add <- uset[uset$aa == aa, 2]
+        if(length(add) == 0){
+          addList <- c(addList, 0)
+        }else{
+          addList <- c(addList, add)
+        }
+      }  
+      synUtest[[i]] <- addList
+    }
+    
+    predTest <- c()
+    for(i in 1:3){
+      predTest <- c(predTest, sum(coefList[[i]][1:length(keyPos[[i]])+1] * synUtest[[i]]) + coefList[[i]][1])
+    }
+    pred <- predTest %*% diag(svd$d) %*% t(svd$v)
+    print(RMSD(pred,tetra_matrix[interation,]))
+    trueList <- c(trueList, tetra_matrix[interation,])
+    predList <- c(predList, pred)
+    coefTable <- rbind.data.frame(coefTable, unlist(coefList))
+    print(interation)
+  }
+  
+  
+  
+  plot(trueList, predList)
+  mean((trueList-predList)^2)^(1/2)
+  dt <- cbind.data.frame(trueList, predList)
+  summary(lm(predList~trueList,dt))
+  
+  
+  tetra_trans_matrix <- matrix(data = c(1,1,1,1,-1,-1,-1,1,-1,-1,-1,1), nrow = 4, ncol = 3, byrow = TRUE)
+  pssm_trans_matrix <- MASS::ginv(tetra_trans_matrix)
+  
+  mean_matrix <- matrix(nrow = nrow(tetra_matrix), ncol = 3, data = tetra_means, byrow = T)
+  
+  #apply(t((tetra_matrix+mean_matrix)%*%pssm_trans_matrix + 0.25), 2, function(x) x/max(x)) - pos_matrix
+  
+  trueMatrix <- matrix(nrow = nrow(tetra_matrix), ncol = 3, data = trueList, byrow = T)
+  predMatrix <- matrix(nrow = nrow(tetra_matrix), ncol = 3, data = predList, byrow = T)
+  
+  trueMatrix1 <- apply(t((trueMatrix+mean_matrix)%*%pssm_trans_matrix + 0.25), 2, function(x) x/max(x))
+  predMatrix1 <- apply(t((predMatrix+mean_matrix)%*%pssm_trans_matrix + 0.25), 2, function(x) x/max(x))
+  
+  predMatrix1[predMatrix1 < 0] <- 0.001
+  
+  pred <- unlist(data.frame(apply(log(predMatrix1), 2, function(column) column - mean(column))))
+  true <- unlist(data.frame(apply(log(trueMatrix1), 2, function(column) column - mean(column))))
+  
+  predTrue <- data.frame(pred, true)
+  
+  plot(true,pred, pch = 19, xlab = 'Experimental ????G', ylab = 'Predicted ????G', main = 'SVD prediction', col = c('green','blue','orange','red'))
+  legend( x = "bottomright", legend = c('A', 'C', 'G', 'T'), col =c('green','blue','orange','red'), pch = 19, bty='n')
+  lm <- lm(true~pred+0, predTrue)
+  rsq <- summary(lm)$r.squared
+  error <- mean((pred-true)^2)^(1/2)
+  add <- data.frame(no.features = fn, rsq, error)
+  preditionPower <- rbind.data.frame(preditionPower, add)
+  coeffs[[fn]] <- coefTable
+}
+
+
+coeffs[[1]]
+dplyr::arrange(preditionPower,desc(rsq))[1:10,]
+
+plot(preditionPower$rsq[1:10], pch = 1, col = "red", type = 'l', lwd = 2, ylim = c(0.5, 1),xlab = 'No. Features for each PC', ylab = 'R-square/RMSD', main = 'Prediction Accuracy Assessment')
+lines(preditionPower$error[1:10], pch = 1, col = "blue", lwd = 2)
+legend(l, x = "topright", legend = c('R-square', 'RMSD'), lwd = 2, col =c('red','blue'), lty=1, cex = 1, bty = 'n')
+
+
+####ridge regression####
+trueList <- c()
+predList <- c()
+#keyPos <- unique(c(X1feature,X2feature,X3feature))
+keyPos <- c(1:55)
+coefTable <- data.frame(NULL)
+for(interation in 1:ncol(pos_matrix)){
+  alignment <- alignment_backup[-interation,]
+  svd <- svd(tetra_matrix[-interation,])
+  
+  #average list
+  uList <- list()
+  for(i in 1:3){
+    rowList <- list()
+    for(j in keyPos){
+      u1 <- svd$u[,i]
+      aa <- substr(alignment$alignment,j,j)
+      dt <- cbind.data.frame(aa,u1)
+      aas <- unique(dt$aa)
+      means <- c()
+      for(a in aas){
+        subDt <- dt[dt$aa == a,]
+        means <- c(means, mean(subDt$u1))
+      }
+      meanDt <- data.frame(aa = aas, mean = means)
+      rowList[[j]] <- meanDt
+    }
+    uList[[i]] <- rowList
+  }
+  
+  #synthetic U matrix
+  synUList <- list()
+  for(ali in 1:nrow(alignment)){
+    synU <- list()
+    for(i in 1:3){
+      addList <- c()
+      for(j in keyPos){
+        aa <- substr(alignment$alignment[ali],j,j)
+        uset <- uList[[i]][[j]]
+        add <- uset[uset$aa == aa, 2]
+        addList <- c(addList, add)
+      }  
+      synU[[i]] <- addList
+    }
+    synUList[[ali]] <- synU
+  }
+  
+  #get linear regression coefficients
+  synUpred <- list()
+  coefList <- list()
+  for(uindex in 1:3){
+    synthesizedU <- matrix(nrow = nrow(alignment), ncol = length(keyPos))
+    for(i in 1:nrow(alignment)){
+      synthesizedU[i,] <- synUList[[i]][[uindex]]
+    }
+    synthesizedU <- data.frame(synthesizedU)
+    synthesizedU$label <- svd$u[,uindex]
+    cv.glm <- glmnet::cv.glmnet(as.matrix(synthesizedU[,-ncol(synthesizedU)]), synthesizedU$label, alpha = 0)
+    best_lambda <- cv.glm$lambda.min
+    best_model <- glmnet::glmnet(as.matrix(synthesizedU[,-ncol(synthesizedU)]), synthesizedU$label, alpha = 0, lambda = best_lambda)
+    print(best_lambda)
+    summary(best_model)
+    coef <- as.vector(coef(best_model))
+    coef[coef == '.'] <- 0
+    coefList[[uindex]] <- coef
+    
+    newU <- c()
+    for(i in 1:nrow(alignment)){
+      add <- sum(synthesizedU[i,1:length(keyPos)]*coef[1:length(keyPos)+1]) + coef[1]
+      newU <- c(newU,add)
+    }
+    synUpred[[uindex]] <- newU
+  }
+  
+  
+  Upred <- matrix(nrow = nrow(alignment), ncol = 3)
+  for(i in 1:3){
+    Upred[,i] <- synUpred[[i]]
+  }
+  
+  reSvd <- Upred %*% diag(svd$d) %*% t(svd$v)
+  #print(RMSD(reSvd, tetra_matrix[-interation,]))
+  
+  #test
+  ali <- interation
+  synUtest <- list()
+  for(i in 1:3){
+    addList <- c()
+    for(j in keyPos){
+      aa <- substr(alignment_backup$alignment[ali],j,j)
+      uset <- uList[[i]][[j]]
+      add <- uset[uset$aa == aa, 2]
+      if(length(add) == 0){
+        addList <- c(addList, 0)
+      }else{
+        addList <- c(addList, add)
+      }
+    }  
+    synUtest[[i]] <- addList
+  }
+  
+  predTest <- c()
+  for(i in 1:3){
+    predTest <- c(predTest, sum(coefList[[i]][1:length(keyPos)+1] * synUtest[[i]]) + coefList[[i]][1])
+  }
+  pred <- predTest %*% diag(svd$d) %*% t(svd$v)
+  #print(RMSD(pred,tetra_matrix[interation,]))
+  trueList <- c(trueList, tetra_matrix[interation,])
+  predList <- c(predList, pred)
+  coefTable <- rbind.data.frame(coefTable, unlist(coefList))
+  print(interation)
+}
+
+
+
+plot(trueList, predList)
+mean((trueList-predList)^2)^(1/2)
+dt <- cbind.data.frame(trueList, predList)
+summary(lm(predList~trueList,dt))
+
+
+tetra_trans_matrix <- matrix(data = c(1,1,1,1,-1,-1,-1,1,-1,-1,-1,1), nrow = 4, ncol = 3, byrow = TRUE)
+pssm_trans_matrix <- MASS::ginv(tetra_trans_matrix)
+
+mean_matrix <- matrix(nrow = nrow(tetra_matrix), ncol = 3, data = tetra_means, byrow = T)
+
+#apply(t((tetra_matrix+mean_matrix)%*%pssm_trans_matrix + 0.25), 2, function(x) x/max(x)) - pos_matrix
+
+trueMatrix <- matrix(nrow = nrow(tetra_matrix), ncol = 3, data = trueList, byrow = T)
+predMatrix <- matrix(nrow = nrow(tetra_matrix), ncol = 3, data = predList, byrow = T)
+
+trueMatrix1 <- apply(t((trueMatrix+mean_matrix)%*%pssm_trans_matrix + 0.25), 2, function(x) x/max(x))
+predMatrix1 <- apply(t((predMatrix+mean_matrix)%*%pssm_trans_matrix + 0.25), 2, function(x) x/max(x))
+
+predMatrix1[predMatrix1 < 0] <- 0.001
+
+pred <- unlist(data.frame(apply(log(predMatrix1), 2, function(column) column - mean(column))))
+true <- unlist(data.frame(apply(log(trueMatrix1), 2, function(column) column - mean(column))))
+
+predTrue <- data.frame(pred, true)
+
+plot(true,pred)
+lm <- lm(true~pred+0, predTrue)
+summary(lm)
+rsq <- summary(lm)$r.squared
+error <- mean((pred-true)^2)^(1/2)
+
+####lasso coeffs####
+
+coefDt <- data.frame(coefList)
+colnames(coefDt) <- paste0('V', c(1,2,3))
+coefDt$name <- c(0:55)
+dplyr::filter(coefDt, V1 != 0)
+dplyr::arrange(svd.pvalTable, desc(X3))[]
+
+
+####inspect svd features####
+i = 3
+j = 30
+p = 3
+properties <- c('Hydropathy', 'Volumn', 'Isoelectic Point')
+PCs <- c('PC1','PC2','PC3')
+svd <- svd(tetra_matrix)
+upRsqMatrixList <- list()
+for (p in 1:3){
+  upRsqMatrix <- matrix(nrow = 55, ncol = 3, data = 0)
+  for(i in 1:3){
+    for(j in 1:55){
+      u1 <- svd$u[,i]
+      aa <- substr(alignment$alignment,j,j)
+      dt <- cbind.data.frame(AA = aa,u1)
+      AAfeature$AA <- AA
+      dt <- merge(dt, AAfeature, by = 'AA')
+      f <- as.formula(paste0('u1~', colnames(dt)[p+2]))
+      plot(dt[,p+2], dt$u1, pch = 19, xlab = properties[p], ylab = PCs[i], main = paste0('AA Position ', j))
+      lm <- lm(f, dt)
+      if(is.na(lm[1]$coefficients[2])){
+        next()
+      }
+       
+      abline(lm, lwd = 2, col = 'red')
+      summary <- summary(lm(f, dt))
+      if(nrow(summary$coefficients) == 1){
+        next()
+      }
+      rsq <- -log(summary$coefficients[2,4], 10)
+      rsq
+      upRsqMatrix[j,i] <- rsq
+    }
+  }
+  upRsqMatrixList[[p]] <- upRsqMatrix
+}
+
+meanRsqMatrix <- matrix(nrow = 3, ncol = 3, data = 0)
+for(i in 1:3){
+  for(j in 1:3){
+    meanRsqMatrix[i,j] <- mean(upRsqMatrixList[[i]][upRsqMatrixList[[i]][,j] != 0,j])
+  }
+}
+rownames(meanRsqMatrix) <- c('Hydropathy', 'Volumn', 'PI')
+colnames(meanRsqMatrix) <- c('u1', 'u2', 'u3')
+boxplot(u1~aa,dt)
+
+####base line with closes sequence prediction####
+trueList <- c()
+predList <- c()
+alignment <- alignment_backup
+for(i in 1:ncol(pos_matrix)){
+  seq <- alignment$alignment[i]
+  maxStr <- Inf
+  predIndex <- 0
+  for(j in 1:ncol(pos_matrix)){
+    if(j != i){
+      Str <- stringdist::stringdist(seq, alignment$alignment[j])
+      if(Str < maxStr){
+        maxStr <- Str
+        predIndex <- j
+      }
+    }
+  }
+  print(predIndex)
+  trueList <- c(trueList, unlist(data.frame(apply(log(as.data.frame(pos_matrix[,i])), 2, function(column) column - mean(column)))))
+  predList <- c(predList, unlist(data.frame(apply(log(as.data.frame(pos_matrix[,predIndex])), 2, function(column) column - mean(column)))))
+}
+
+plot(trueList,predList, pch = 19, xlab = 'Experimental ????G', ylab = 'Predicted ????G', main = 'Closest sequence prediction', col = c('green','blue','orange','red'))
+legend( x = "bottomright", legend = c('A', 'C', 'G', 'T'), col =c('green','blue','orange','red'), pch = 19, bty='n')
+mean((trueList-predList)^2)^(1/2)
+dt <- cbind.data.frame(trueList, predList)
+summary(lm(predList~trueList,dt))
+
+
+####SELEX prediction####
+posMotif <- 'P-1'
+pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+alignment <- data.frame(NULL)
+for(i in 1:ncol(pos_matrix)){
+  alignment <- rbind.data.frame(alignment, bHLH_pbAlignment[bHLH_pbAlignment$name == colnames(pos_matrix)[i],])
+}
+
+tetra_matrix <- matrix2tetrahedron(pos_matrix)
+posMotif <- 'P1'
+pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+alignment <- data.frame(NULL)
+for(i in 1:ncol(pos_matrix)){
+  alignment <- rbind.data.frame(alignment, bHLH_pbAlignment[bHLH_pbAlignment$name == colnames(pos_matrix)[i],])
+}
+
+tetra_matrix2 <- matrix2tetrahedron(pos_matrix)
+
+
+
+keyPos = c(13,5,8,14,30,31)
+modMotifH5P.1 <- pred.SVD.ridge(alignment = alignment, tetra_matrix = tetra_matrix, keyPos = keyPos, testSeq = 
+                                  '-KSLRPLLEKRRRARINQSLSQLKGLI-L------PLLGRENS--NCSKLEKADVL')
+modMotifH13P.1 <- pred.SVD.ridge(alignment = alignment, tetra_matrix = tetra_matrix, keyPos = keyPos, testSeq = 
+                                   '-KSLKPLLEKRRVARINQSLSQLKGLI-L------PLLGRENS--NCSKLEKADVL')
+modMotifHDP.1 <- pred.SVD.ridge(alignment = alignment, tetra_matrix = tetra_matrix, keyPos = keyPos, testSeq = 
+                                  '-KSLRPLLEKRRVARINQSLSQLKGLI-L------PLLGRENS--NCSKLEKADVL')
+modMotifH5P1 <- pred.SVD.ridge(alignment = alignment, tetra_matrix = tetra_matrix2, keyPos = keyPos, testSeq = 
+                                 '-KSLRPLLEKRRRARINQSLSQLKGLI-L------PLLGRENS--NCSKLEKADVL')
+modMotifH13P1 <- pred.SVD.ridge(alignment = alignment, tetra_matrix = tetra_matrix2, keyPos = keyPos, testSeq = 
+                                  '-KSLKPLLEKRRVARINQSLSQLKGLI-L------PLLGRENS--NCSKLEKADVL')
+modMotifHDP1 <- pred.SVD.ridge(alignment = alignment, tetra_matrix = tetra_matrix2, keyPos = keyPos, testSeq = 
+                                 '-KSLRPLLEKRRVARINQSLSQLKGLI-L------PLLGRENS--NCSKLEKADVL')
+
+modMotifA5P.1 <- pred.SVD.ridge(alignment = alignment, tetra_matrix = tetra_matrix, keyPos = keyPos, testSeq = 
+                                  '-VARKNERERNRVKLVNLGFQALRQHV-P------HGG-------ASKKLSKVETL')
+modMotifA13P.1 <- pred.SVD.ridge(alignment = alignment, tetra_matrix = tetra_matrix, keyPos = keyPos, testSeq = 
+                                   '-VARRNERERNRRKLVNLGFQALRQHV-P------HGG-------ASKKLSKVETL')
+modMotifADP.1 <- pred.SVD.ridge(alignment = alignment, tetra_matrix = tetra_matrix, keyPos = keyPos, testSeq = 
+                                  '-VARKNERERNRRKLVNLGFQALRQHV-P------HGG-------ASKKLSKVETL')
+modMotifA5P1 <- pred.SVD.ridge(alignment = alignment, tetra_matrix = tetra_matrix2, keyPos = keyPos, testSeq = 
+                                 '-VARKNERERNRVKLVNLGFQALRQHV-P------HGG-------ASKKLSKVETL')
+modMotifA13P1 <- pred.SVD.ridge(alignment = alignment, tetra_matrix = tetra_matrix2, keyPos = keyPos, testSeq = 
+                                  '-VARRNERERNRRKLVNLGFQALRQHV-P------HGG-------ASKKLSKVETL')
+modMotifADP1 <- pred.SVD.ridge(alignment = alignment, tetra_matrix = tetra_matrix2, keyPos = keyPos, testSeq = 
+                                 '-VARKNERERNRRKLVNLGFQALRQHV-P------HGG-------ASKKLSKVETL')
+
+predTable <- cbind.data.frame(modMotifH5P.1, modMotifH13P.1, modMotifHDP.1, 
+                               
+                              modMotifA5P.1, modMotifA13P.1, modMotifADP.1,
+                              modMotifH5P1, modMotifH13P1, modMotifHDP1, 
+                              
+                              modMotifA5P1, modMotifA13P1, modMotifADP1
+                              )
+rownames(predTable) = c('A','C', 'G', 'T')
+
+mononucleotide_logo(predTable[,])
+
+trueTable <- cbind.data.frame(SELEX_motifs$H5$`P.1`, SELEX_motifs$H13$`P.1`, SELEX_motifs$HD$`P.1`,
+                             
+                              SELEX_motifs$A5$`P.1`, SELEX_motifs$A13$`P.1`, SELEX_motifs$AD$`P.1`,
+                              SELEX_motifs$H5$`P1`, SELEX_motifs$H13$`P1`, SELEX_motifs$HD$`P1`,
+                              
+                              SELEX_motifs$A5$`P1`, SELEX_motifs$A13$`P1`, SELEX_motifs$AD$`P1`
+                              )
+rownames(trueTable) = c('A','C', 'G', 'T')
+
+mononucleotide_logo(trueTable[,])
+
+#plot correlation 
+pred <- unlist(data.frame(apply(predTable, 2, function(column) column - mean(column))))
+true <- unlist(data.frame(apply(trueTable, 2, function(column) column - mean(column))))
+
+predTrue <- data.frame(pred, true)
+
+plot(true,pred, col = c(rep(1, length(pred)/2), rep(2,length(pred)/2)))
+lm <- lm(true~pred+0, predTrue)
+summary(lm)
+mean((pred-true)^2)^(1/2)
+
+
+
+
+
+####deprecated####
+#P-1 affinity 
+fM <- data.frame(NULL)
+for(i in 1:length(bHLH_motifs_backup)){
+  name <- bHLH_motifs_backup[[i]]$name
+  featureList <- c()
+  Label <- log(bHLH_motifs_backup[[i]]$matrix[,'P-1'])
+  sequence <- bHLH_pbAlignment_backup[bHLH_pbAlignment_backup$name == name,2]
+  if(length(sequence) < 1){
+    next()
+  }
+  for(j in keyPos){
+    AA <- substr(sequence, j,j)
+    index <- paste0('AA', j,'+P-1')
+    feature <- ddGFeature$dddGList[[index]][,AA]
+    featureList <- c(featureList,feature)
+  }
+  addList <- c(featureList, Label)
+  fM <- rbind.data.frame(fM, addList)
+}
+
+cnames <- c()
+base <- c('A','C','G','T')
+for(i in keyPos){
+  cnames <- c(cnames, paste0(base,i))
+}
+cnames <- c(cnames, paste0(base,'.Label'))
+colnames(fM) <- cnames
+
+
+f <- paste0(colnames(fM)[18], collapse = '+')
+f <- paste0(f,'~')
+f <- paste0(f, paste0(colnames(fM)[1:16], collapse = '+'))
+f <- as.formula(f)
+lm <- lm(as.formula(f), data = fM)
+summary(lm)
+pred <- predict(lm,fM)
+plot(as.numeric(fM$C.Label), as.numeric(pred))

@@ -1,0 +1,26 @@
+{
+    "id": "84E2CCFE",
+    "path": "E:/Desktop/FamilyCode/FamilyCode/R/FCfunctions.R",
+    "project_path": "R/FCfunctions.R",
+    "type": "r_source",
+    "hash": "2870426457",
+    "contents": "",
+    "dirty": false,
+    "created": 1687907334996.0,
+    "source_on_save": false,
+    "relative_order": 2,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "795,28",
+        "scrollLine": "786"
+    },
+    "folds": "71|27|76|0|\n86|2|101|0|\n113|2|133|0|\n142|29|180|0|\n211|31|224|0|\n235|31|278|0|\n281|35|286|0|\n289|33|297|0|\n301|39|327|0|\n330|23|336|0|\n339|37|346|0|\n357|34|387|0|\n391|44|412|0|\n415|30|427|0|\n430|38|472|0|\n476|106|508|0|\n515|41|593|0|\n603|50|625|0|\n628|109|642|0|\n645|76|671|0|\n674|156|687|0|\n691|62|727|0|\n730|91|732|0|\n735|95|737|0|\n740|73|749|0|\n752|30|762|0|\n",
+    "lastKnownWriteTime": 1688185759,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1688185759819,
+    "read_only": false,
+    "read_only_alternatives": []
+}

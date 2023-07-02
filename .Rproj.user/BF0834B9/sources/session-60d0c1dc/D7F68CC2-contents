@@ -1,0 +1,1031 @@
+require('RJSONIO')
+require('plotly')
+source('E:/Desktop/HB_Rotation_1/Family_code/FCfunctions.R')
+library("rjson")
+library(proteinStructureBoost)
+
+####input experimental SELEX-seq+ProBound data####
+groups <- c('HWT', 'H5', 'H13','HD', 'AWT', 'A5', 'A13', 'AD')
+modelFile_Template <- 'E:/Desktop/RM_Rotation_3/SELEX_12212022/$group$_pb/fit.models.consensus.json'
+rows <- c("A" ,   "C"  ,  "G"   , "T"  ,  "AA:1", "AC:1" ,"AG:1", "AT:1", "CA:1", "CC:1",
+          "CG:1", "CT:1" ,"GA:1", "GC:1", "GG:1", "GT:1", "TA:1", "TC:1", "TG:1", "TT:1")
+rec_seq <- 'CANNTG'
+SELEX_motifs <- list()
+
+
+for(n in 1:length(groups)){
+  name <- groups[n]
+  modelFile <- gsub("\\$group\\$", name, modelFile_Template)
+  result <- parse_json(file = modelFile)
+  if(name == 'H5'){
+    mono <- result[[3]]$mononucleotide
+  }else{
+    mono <- result[[2]]$mononucleotide
+  }
+  
+  mono.df <- cbind.data.frame(name = rows[1:4], mono)
+  #di <- result[[2]]$dinucleotide[[1]]
+  #di.df <- data.frame(name = rows[5:20])
+  #for(i in 1:dim(di)[3]){
+  #  add <- c()
+  #  for(f in colnames(di[,,i])){
+  #    for(s in rownames(di[,,i])){
+  #      add <- c(add, di[s,f,i])
+  #    }
+  #  }
+  #  di.df <- cbind.data.frame(di.df, add)
+  #}
+  #di.df <- cbind.data.frame(di.df, fill = NA)
+  #colnames(di.df) <- colnames(mono.df)
+  #monodi.df <- rbind.data.frame(mono.df, di.df)
+  
+  
+  #JSON_matrix <- exp(monodi.df[1:4,2:13])
+  JSON_matrix <- exp(mono.df[,2:13])
+  #bind_pos <- find_binding_site(JSON_matrix, rec_seq)$max_pos[1]
+  bind_pos <- 4
+  JSON_matrix_motif <- JSON_matrix[,c((bind_pos):(bind_pos+nchar(rec_seq)-1))]
+  pos_index <- c('P-3','P-2','P-1','P1','P2','P3')
+  colnames(JSON_matrix_motif) <- pos_index
+  SELEX_motifs[[name]] <- JSON_matrix_motif
+}
+
+
+####compare WT with recorded results####
+#from BaseShape.R line 143
+AApos <- 13
+posMotif <- 'P-1'
+
+ProteinPos <- data.frame(name = bHLH_pbAlignment$name, pos = substr(bHLH_pbAlignment$alignment,AApos,AApos))
+PosAA <- c()
+for(i in 1:length(bHLH_motifs)){
+  PosAA <- c(PosAA, ProteinPos[ProteinPos$name == bHLH_motifs[[i]]$name, 2])
+}
+pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+HT_WT <- pos_matrix[,c('ASCL2_Yin2017', 'HES2_Yin2017')]
+pos_matrix_test <- cbind.data.frame(HWT = SELEX_motifs[['HWT']][,posMotif], AWT = SELEX_motifs[['AWT']][,posMotif],
+                                    HHT = HT_WT[,2], AHT = HT_WT[,1])
+levels(as.factor(colnames(pos_matrix_test)))
+df <- matrix2tetrahedron(pos_matrix_test)
+
+####create comparison plot####
+wtcomp_plot <- plot_tetrahedron_resiColor(pos_matrix_test, size = 10,base_colors = c('green','blue','orange','red'), 
+                                   resiColors = c('red','red4', 'blue', 'blue4'))
+
+wtcomp_plot <- wtcomp_plot%>%add_trace(df, x = df[1:nrow(df),1], y=df[1:nrow(df),2],z=df[1:nrow(df),3],
+                        type = 'scatter3d',
+                        mode = 'text',
+                        text = c('HES2_WT', 'ASCL2_WT', 'HES2_HTselex', 'ASCL2_HTselex'),
+                        textposition = 'top',
+                        name = 'label',
+                        textfont = list(color = 'grey', size = size),
+                        opacity = 0.5)
+plot_file <- "E:/Desktop/HB_Rotation_1/bHLH_SELEX_Tetrahedron/WT-baseline_comparison_P1.html"
+htmlwidgets::saveWidget(wtcomp_plot, plot_file)
+
+####WT comparison with global data####
+ProteinPos <- data.frame(name = bHLH_pbAlignment$name, pos = substr(bHLH_pbAlignment$alignment,AApos,AApos))
+PosAA <- c()
+for(i in 1:length(bHLH_motifs)){
+  PosAA <- c(PosAA, ProteinPos[ProteinPos$name == bHLH_motifs[[i]]$name, 2])
+}
+pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+colnames(pos_matrix) <- PosAA
+levels(as.factor(colnames(pos_matrix)))
+global_plot <- plot_tetrahedron_resiColor(pos_matrix, size = 10,base_colors = c('green','blue','orange','red'), 
+                                       resiColors = c('#cc9933', '#ff9933', '#cc99cc', '#6666cc','#990000','#1affff','#ffd350'))
+#resiColors = c('grey', '#ff9966', '#660033', '#cc9933','#663300','#336666','#990000','#0000ff') for AA5
+plot_file <- "E:/Desktop/HB_Rotation_1/bHLH_SELEX_Tetrahedron/AA13+P-1.html"
+htmlwidgets::saveWidget(global_plot, plot_file)
+
+global_plot <- global_plot%>%
+  add_trace(df, x = df[1,1], y=df[1,2],z=df[1,3], color = I('black'),
+                        type = 'scatter3d',
+                        mode = 'markers',
+                        size = size,
+                        opacity = 0.8,
+                        name = 'Entries',
+            showlegend = F)%>%
+  add_trace(df, x = df[2,1], y=df[2,2],z=df[2,3], color = I('black'),
+            type = 'scatter3d',
+            mode = 'markers',
+            size = size,
+            opacity = 0.8,
+            name = 'Entries',
+            showlegend = F)%>%
+  add_trace(df, x = df[1:nrow(df),1], y=df[1:nrow(df),2],z=df[1:nrow(df),3],
+                                                      type = 'scatter3d',
+                                                      mode = 'text',
+                                                      text = c('HES2_WT', 'ASCL2_WT', 'HES2_HTselex', 'ASCL2_HTselex'),
+                                                      textposition = 'top',
+                                                      name = 'label',
+                                                      textfont = list(color = 'grey', size = size),
+                                                      opacity = 0.5)
+
+plot_file <- "E:/Desktop/HB_Rotation_1/bHLH_SELEX_Tetrahedron/AA13+P-1+AWT_HWT.html"
+htmlwidgets::saveWidget(global_plot, plot_file)
+
+####P13 with only R and V####
+AApos <- 13
+posMotif <- 'P1'
+
+ProteinPos <- data.frame(name = bHLH_pbAlignment$name, pos = substr(bHLH_pbAlignment$alignment,AApos,AApos))
+PosAA <- c()
+for(i in 1:length(bHLH_motifs)){
+  PosAA <- c(PosAA, ProteinPos[ProteinPos$name == bHLH_motifs[[i]]$name, 2])
+}
+pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+colnames(pos_matrix) <- PosAA
+pos_matrix_r <- pos_matrix[,colnames(pos_matrix) == 'R']
+pos_matrix_v <- pos_matrix[,colnames(pos_matrix) == 'V']
+pos_matrix <- cbind.data.frame(pos_matrix_r, pos_matrix_v)
+levels(as.factor(colnames(pos_matrix)))
+RV13_plot <- plot_tetrahedron_resiColor(pos_matrix, size = 10,base_colors = c('green','blue','orange','red'), 
+                                          resiColors = c('#990000','#ffcc35'))
+
+mutantMatrix <- cbind.data.frame(HWT = SELEX_motifs[['HWT']][,posMotif],
+                                 H5 = SELEX_motifs[['H5']][,posMotif], H13 = SELEX_motifs[['H13']][,posMotif],
+                                 HD = SELEX_motifs[['HD']][,posMotif], AWT = SELEX_motifs[['AWT']][,posMotif],
+                                 A5 = SELEX_motifs[['A5']][,posMotif],
+                                 A13 = SELEX_motifs[['A13']][,posMotif], AD = SELEX_motifs[['AD']][,posMotif])
+df <- matrix2tetrahedron(mutantMatrix)
+
+RV13_plot <- RV13_plot%>%add_trace(df, x = df[c(1,2,7,8),1], y=df[c(1,2,7,8),2],z=df[c(1,2,7,8),3], color = I('#990000'),
+                      type = 'scatter3d',
+                      mode = 'markers',
+                      size = size,
+                      opacity = 1,
+                      name = 'Entries',
+                      showlegend = F)%>%
+  add_trace(df, x = df[c(3,4,5,6),1], y=df[c(3,4,5,6),2],z=df[c(3,4,5,6),3], color = I('#ffcc35'),
+                        type = 'scatter3d',
+                        mode = 'markers',
+                        size = size,
+                        opacity = 1,
+                        name = 'Entries',
+                        showlegend = F)%>%
+  add_trace(df, x = df[,1], y=df[,2],z=df[,3],
+            type = 'scatter3d',
+            mode = 'text',
+            text = rownames(df),
+            textposition = 'top',
+            name = 'label',
+            textfont = list(color = 'grey', size = size),
+            opacity = 0.5)
+
+
+#plot_file <- "E:/Desktop/HB_Rotation_1/bHLH_SELEX_Tetrahedron/AA13RV+P1_mutants.html"
+#htmlwidgets::saveWidget(RV13_plot, plot_file)
+
+mesh <- matrix2tetrahedron(pos_matrix)
+mesh13R <- mesh[rownames(mesh) == 'R',]
+meshAdd <- meshSeq(nrow(mesh13R))
+mesh13R_seq <- meshK[meshAdd,]
+RV13_plot%>%add_trace(tetrahedron, x = mesh13R_seq[,1],
+                     y=mesh13R_seq[,2],z=mesh13R_seq[,3],color = I('#990000'),
+                     type = 'scatter3d',
+                     mode = 'lines',
+                     line = list(width = 1),
+                     opacity = 0.05,
+                     name = 'meshK')
+
+meshR <- mesh[rownames(mesh) == 'V',]
+meshAdd <- meshSeq(nrow(meshR))
+mesh13V_seq <- meshR[meshAdd,]
+RV13_plot%>%add_trace(tetrahedron, x = mesh13V_seq[,1],
+                     y=mesh13V_seq[,2],z=mesh13V_seq[,3],color = I('#ffcc35'),
+                     type = 'scatter3d',
+                     mode = 'lines',
+                     line = list(width = 1),
+                     opacity = 0.1,
+                     name = 'meshK')
+####P5 with only K and R####
+AApos <- 5
+posMotif <- 'P1'
+
+ProteinPos <- data.frame(name = bHLH_pbAlignment$name, pos = substr(bHLH_pbAlignment$alignment,AApos,AApos))
+PosAA <- c()
+for(i in 1:length(bHLH_motifs)){
+  PosAA <- c(PosAA, ProteinPos[ProteinPos$name == bHLH_motifs[[i]]$name, 2])
+}
+pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+colnames(pos_matrix) <- PosAA
+pos_matrix_r <- pos_matrix[,colnames(pos_matrix) == 'R']
+pos_matrix_v <- pos_matrix[,colnames(pos_matrix) == 'K']
+pos_matrix <- cbind.data.frame(pos_matrix_r, pos_matrix_v)
+levels(as.factor(colnames(pos_matrix)))
+RK5_plot <- plot_tetrahedron_resiColor(pos_matrix, size = 10,base_colors = c('green','blue','orange','red'), 
+                                        resiColors = c('#663300','#990000'))
+
+mutantMatrix <- cbind.data.frame(HWT = SELEX_motifs[['HWT']][,posMotif],
+                                 H5 = SELEX_motifs[['H5']][,posMotif], H13 = SELEX_motifs[['H13']][,posMotif],
+                                 HD = SELEX_motifs[['HD']][,posMotif], AWT = SELEX_motifs[['AWT']][,posMotif],
+                                 A5 = SELEX_motifs[['A5']][,posMotif],
+                                 A13 = SELEX_motifs[['A13']][,posMotif], AD = SELEX_motifs[['AD']][,posMotif])
+df <- matrix2tetrahedron(mutantMatrix)
+
+RK5_plot <- RK5_plot%>%add_trace(df, x = df[c(1,2,7,8),1], y=df[c(1,2,7,8),2],z=df[c(1,2,7,8),3], color = I('#663300'),
+                                    type = 'scatter3d',
+                                    mode = 'markers',
+                                    size = size,
+                                    opacity = 1,
+                                    name = 'Entries',
+                                    showlegend = F)%>%
+  add_trace(df, x = df[c(3,4,5,6),1], y=df[c(3,4,5,6),2],z=df[c(3,4,5,6),3], color = I('#990000'),
+            type = 'scatter3d',
+            mode = 'markers',
+            size = size,
+            opacity = 1,
+            name = 'Entries',
+            showlegend = F)%>%
+  add_trace(df, x = df[,1], y=df[,2],z=df[,3],
+            type = 'scatter3d',
+            mode = 'text',
+            text = rownames(df),
+            textposition = 'top',
+            name = 'label',
+            textfont = list(color = 'grey', size = size),
+            opacity = 0.5)
+
+
+#plot_file <- "E:/Desktop/HB_Rotation_1/bHLH_SELEX_Tetrahedron/AA5KR+P1_mutants.html"
+#htmlwidgets::saveWidget(RK5_plot, plot_file)
+
+
+mesh <- matrix2tetrahedron(pos_matrix)
+meshK <- mesh[rownames(mesh) == 'K',]
+meshAdd <- meshSeq(nrow(meshK))
+mesh5K_seq <- meshK[meshAdd,]
+RK5_plot%>%add_trace(tetrahedron, x = mesh5K_seq[,1],
+                     y=mesh5K_seq[,2],z=mesh5K_seq[,3],color = I('#663300'),
+                     type = 'scatter3d',
+                     mode = 'lines',
+                     line = list(width = 1),
+                     opacity = 0.1,
+                     name = 'meshK')
+
+meshR <- mesh[rownames(mesh) == 'R',]
+meshAdd <- meshSeq(nrow(meshR))
+mesh5R_seq <- meshR[meshAdd,]
+RK5_plot%>%add_trace(tetrahedron, x = mesh5R_seq[,1],
+                     y=mesh5R_seq[,2],z=mesh5R_seq[,3],color = I('#990000'),
+                     type = 'scatter3d',
+                     mode = 'lines',
+                     line = list(width = 1),
+                     opacity = 0.1,
+                     name = 'meshK')
+
+
+
+
+
+####add mesh to data points####
+AApos <- 13
+posMotif <- 'P1'
+ProteinPos <- data.frame(name = bHLH_pbAlignment$name, pos = substr(bHLH_pbAlignment$alignment,AApos,AApos))
+PosAA <- c()
+for(i in 1:length(bHLH_motifs)){
+  PosAA <- c(PosAA, ProteinPos[ProteinPos$name == bHLH_motifs[[i]]$name, 2])
+}
+pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+colnames(pos_matrix) <- PosAA
+levels(as.factor(colnames(pos_matrix)))
+mutantMatrix <- cbind.data.frame(HWT = SELEX_motifs[['HWT_']][,posMotif],
+                                 H5 = SELEX_motifs[['H5']][,posMotif], H13 = SELEX_motifs[['H13']][,posMotif],
+                                 HD = SELEX_motifs[['HD']][,posMotif], AWT = SELEX_motifs[['AWT']][,posMotif],
+                                 A5 = SELEX_motifs[['A5']][,posMotif],
+                                 A13 = SELEX_motifs[['A13']][,posMotif], AD = SELEX_motifs[['AD']][,posMotif])
+df <- matrix2tetrahedron(mutantMatrix)
+global_plot_grey <- plot_tetrahedron_resiColor(pos_matrix, size = 10,base_colors = c('green','blue','orange','red'), 
+                                          resiColors = c('grey'))
+
+global_plot_grey <- global_plot_grey%>%add_trace(df, x = df[,1], y=df[,2],z=df[,3], color = I('red'),
+                                    type = 'scatter3d',
+                                    mode = 'markers',
+                                    size = size,
+                                    opacity = 1,
+                                    name = 'Entries',
+                                    showlegend = F)%>%
+  add_trace(df, x = df[,1], y=df[,2],z=df[,3],
+            type = 'scatter3d',
+            mode = 'text',
+            text = rownames(df),
+            textposition = 'top',
+            name = 'label',
+            textfont = list(color = 'grey', size = size),
+            opacity = 0.5)
+
+mesh_plot <- global_plot_grey%>%
+  add_trace(tetrahedron, x = mesh13R_seq[,1],
+                                       y=mesh13R_seq[,2],z=mesh13R_seq[,3],color = I('#990000'),
+                                       type = 'scatter3d',
+                                       mode = 'lines',
+                                       line = list(width = 1),
+                                       opacity = 0.02,
+                                       name = '13R')%>%
+  add_trace(tetrahedron, x = mesh5R_seq[,1],
+                       y=mesh5R_seq[,2],z=mesh5R_seq[,3],color = I('#ff0000'),
+                       type = 'scatter3d',
+                       mode = 'lines',
+                       line = list(width = 1),
+                       opacity = 0.1,
+                       name = '5R')%>%
+  add_trace(tetrahedron, x = mesh13V_seq[,1],
+            y=mesh13V_seq[,2],z=mesh13V_seq[,3],color = I('#ffcc35'),
+            type = 'scatter3d',
+            mode = 'lines',
+            line = list(width = 1),
+            opacity = 0.1,
+            name = '13V')%>%
+  add_trace(tetrahedron, x = mesh5K_seq[,1],
+            y=mesh5K_seq[,2],z=mesh5K_seq[,3],color = I('#663300'),
+            type = 'scatter3d',
+            mode = 'lines',
+            line = list(width = 1),
+            opacity = 0.1,
+            name = '5K')
+  
+plot_file <- "E:/Desktop/HB_Rotation_1/bHLH_SELEX_Tetrahedron/mutant_Mesh.html"
+htmlwidgets::saveWidget(mesh_plot, plot_file)
+  
+  
+  
+  
+  
+####dddG work flow plotting####
+
+AApos <- 13
+posMotif <- 'P-1'
+ProteinPos <- data.frame(name = bHLH_pbAlignment$name, pos = substr(bHLH_pbAlignment$alignment,AApos,AApos))
+PosAA <- c()
+for(i in 1:length(bHLH_motifs)){
+  PosAA <- c(PosAA, ProteinPos[ProteinPos$name == bHLH_motifs[[i]]$name, 2])
+}
+pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+
+
+colnames(pos_matrix) <- PosAA
+
+#pos_matrix_sele <- pos_matrix[,c(6,97,8,102,79,65)]
+#pos_matrix <- pos_matrix[,-1*c(6,97,8,101,79,65)]
+ncol(pos_matrix)
+#pos_matrix <- cbind.data.frame(pos_matrix_sele, pos_matrix)
+ddGmatrix <- apply(log(pos_matrix), 2, function(column) column - mean(column))
+
+center1 <- data.frame(R13 = apply(pos_matrix[,colnames(pos_matrix) == 'R'], 1, function(row) mean(row)))
+#center2 <- data.frame(M13 = apply(ddGmatrix[,colnames(ddGmatrix) == 'V'], 1, function(row) mean(row)))
+#mononucleotide_logo(cbind.data.frame(center1, center2, center1-center2))
+mononucleotide_logo(ddGmatrix[,colnames(ddGmatrix) == 'V'])
+
+AApos <- 13
+posMotif <- 'P-1'
+
+ProteinPos <- data.frame(name = bHLH_pbAlignment$name, pos = substr(bHLH_pbAlignment$alignment,AApos,AApos))
+PosAA <- c()
+for(i in 1:length(bHLH_motifs)){
+  PosAA <- c(PosAA, ProteinPos[ProteinPos$name == bHLH_motifs[[i]]$name, 2])
+}
+pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+colnames(pos_matrix) <- PosAA
+pos_matrix_r <- pos_matrix[,colnames(pos_matrix) == 'V']
+
+RV13_plot <- plot_tetrahedron_resiColor(pos_matrix_r, size = 10,base_colors = c('green','blue','orange','red'), 
+                                        resiColors = c('#980000'))
+
+
+plotDf <- matrix2tetrahedron(pos_matrix_r)
+
+R13_center <- plot_tetrahedron_resiColor(center1, size = 10,base_colors = c('green','blue','orange','red'), 
+                                        resiColors = c('orange4'))%>%
+  add_trace(plotDf, x = plotDf[,1], y=plotDf[,2],z=plotDf[,3], color = I('orange'),
+            type = 'scatter3d',
+            mode = 'markers',
+            size = 10,
+            opacity = 0.4,
+            name = 'Entries',
+            showlegend = F)
+
+
+center1 <- center1 - max(center1) + 1
+center1 <- log(center1)
+center1 <- center1 - mean(center1[,1])
+
+mononucleotide_logo(center1)
+
+dddG <- data.frame(dddGList$dddGList[['AA13+P-1']][,'R>V'])
+rownames(dddG) <- c('A','C','G','T')
+mononucleotide_logo(dddG)
+mean(dddG[,1])
+
+ddG <- data.frame(ddG = SELEX_motifs[['HWT']][,'P-1'] + dddGList[['AA13+P-1']][,'V>R'])
+rownames(ddG) <- c('A','C','G','T')
+mononucleotide_logo(ddG)
+
+
+
+####Create dddG measurement list####
+bHLH_motifs <- list()
+for(i in 1:length(mono_motifs)){
+  add <- list(name = mono_motifs[[i]]$name, matrix = mono_motifs[[i]]$monoMatrix)
+  if(length(grep('Tcf21',add$name)) == 0 && length(grep('TFEB',add$name)) == 0){
+    bHLH_motifs <- rlist::list.append(bHLH_motifs, add)
+  }else{
+    print(add$name)
+  }
+  
+}
+length(bHLH_motifs)
+
+ittm <- MASS::ginv(tetra_trans_matrix)
+tetrahedronCenter <- F
+frequency <- c()
+frequencyName <- c()
+dddGList <- list()
+for(AApos in c(5,13)){
+  for(posMotif in c('P1', 'P-1')){
+    ProteinPos <- data.frame(name = bHLH_pbAlignment$name, pos = substr(bHLH_pbAlignment$alignment,AApos,AApos))
+    PosAA <- c()
+    for(i in 1:length(bHLH_motifs)){
+      PosAA <- c(PosAA, ProteinPos[ProteinPos$name == bHLH_motifs[[i]]$name, 2])
+    }
+    pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+    colnames(pos_matrix) <- PosAA
+    AAs <- unique(colnames(pos_matrix))
+    dddGdf <- data.frame(placeHolder = c(0,0,0,0))
+    for(aa1 in AAs){
+      for(aa2 in AAs){
+        if(aa2 != aa1){
+          if(!tetrahedronCenter){
+            mean1 <- data.frame(ddG = apply(data.frame(pos_matrix[,colnames(pos_matrix) == aa1]), 1, function(row) mean(row)))
+            mean2 <- data.frame(ddG = apply(data.frame(pos_matrix[,colnames(pos_matrix) == aa2]), 1, function(row) mean(row)))
+          }else{
+            mean1 <- data.frame(ddG = apply(data.frame(matrix2tetrahedron(pos_matrix[,colnames(pos_matrix) == aa1])), 2, function(column) mean(column)))
+            mean2 <- data.frame(ddG = apply(data.frame(matrix2tetrahedron(pos_matrix[,colnames(pos_matrix) == aa2])), 2, function(column) mean(column)))
+            mean1 <- unlist(mean1)%*%ittm
+            mean2 <- unlist(mean2)%*%ittm
+            mean1 <- data.frame(ddG = as.numeric(mean1))
+            mean2 <- data.frame(ddG = as.numeric(mean2))
+          }
+          mean1 <- mean1 - max(mean1) + 1
+          mean2 <- mean2 - max(mean2) + 1
+          mean1 <- log(mean1)
+          mean2 <- log(mean2)
+          dddG <- data.frame(mean2 - mean1)
+          colnames(dddG) <- paste0(aa1, '>', aa2)
+          dddGdf <- cbind.data.frame(dddGdf, dddG)
+          if(posMotif == 'P-1'){
+            frequency <- c(frequency, ncol(data.frame(pos_matrix[,colnames(pos_matrix) == aa1])) * ncol(data.frame((pos_matrix[,colnames(pos_matrix) == aa2]))))
+            frequencyName <- c(frequencyName, paste0('AA', AApos,':', aa1, '>', aa2))
+          }
+        }
+      }
+    }
+    dddGdf <- dddGdf[,-1]
+    dfName <- paste0('AA', AApos, '+', posMotif)
+    dddGList[[dfName]] <- dddGdf
+  }
+}
+frequencyList <- data.frame(frequencyName, frequency)
+
+output <- cbind.data.frame(A = data.frame(dddGList[['AA5+P1']][,'K>R']),
+                           B = data.frame(dddGList[['AA5+P1']]$`K>H`),
+                           C = data.frame(dddGList[['AA5+P1']]$`K>A`),
+                           D = data.frame(dddGList[['AA5+P1']]$`K>I`),
+                           E = data.frame(dddGList[['AA5+P1']]$`K>N`))
+rownames(output) = c('A','C', 'G', 'T')
+mononucleotide_logo(output)
+
+
+
+
+
+
+####checking SELEX test case####
+for(i in groups){
+  SELEX_motifs[[i]] <- log(SELEX_motifs[[i]])
+  SELEX_motifs[[i]] <- data.frame(apply(SELEX_motifs[[i]], 2, function(column) column - mean(column)))
+}
+
+#sequence: H5, H13, HD, A5, A13, AD in P-1, P1
+#predicted
+dddGList = form.dddGList(alignment, bHLH_motifs,  keyPos = c(5,13))
+AA5P.1coef <- 1
+AA5P1coef <- 1
+AA13P.1coef <- 1
+AA13P1coef <- 1
+
+
+
+modMotifH5P.1 <- data.frame(H5 = SELEX_motifs[['HWT']]$`P.1`  + 1*dddGList$dddGList[['AA5+P-1']][,'K>R'])
+modMotifH13P.1 <- data.frame(H13 = SELEX_motifs[['HWT']]$`P.1`  + AA13P.1coef*dddGList$dddGList[['AA13+P-1']][,'R>V'])
+modMotifHDP.1 <- data.frame(HD = SELEX_motifs[['HWT']]$`P.1`  + AA13P.1coef*dddGList$dddGList[['AA13+P-1']][,'R>V'] + AA5P.1coef*dddGList$dddGList[['AA5+P-1']][,'K>R'])
+modMotifH5P1 <- data.frame(H5 = SELEX_motifs[['HWT']]$`P1`  + 1*dddGList$dddGList[['AA5+P1']][,'K>R'])
+modMotifH13P1 <- data.frame(H13 = SELEX_motifs[['HWT']]$`P1`  + AA13P1coef*dddGList$dddGList[['AA13+P1']][,'R>V'])
+modMotifHDP1 <- data.frame(HD = SELEX_motifs[['HWT']]$`P1`  + AA13P1coef*dddGList$dddGList[['AA13+P1']][,'R>V'] + AA5P1coef*dddGList$dddGList[['AA5+P1']][,'K>R'])
+
+modMotifA5P.1 <- data.frame(A5 = SELEX_motifs[['AWT']]$`P.1`  + 1*dddGList$dddGList[['AA5+P-1']][,'R>K'])
+modMotifA13P.1 <- data.frame(A13 = SELEX_motifs[['AWT']]$`P.1`  + AA13P.1coef*dddGList$dddGList[['AA13+P-1']][,'V>R'])
+modMotifADP.1 <- data.frame(AD = SELEX_motifs[['AWT']]$`P.1`  + AA13P.1coef*dddGList$dddGList[['AA13+P-1']][,'V>R'] + AA5P1coef*dddGList$dddGList[['AA5+P-1']][,'R>K'])
+modMotifA5P1 <- data.frame(A5 = SELEX_motifs[['AWT']]$`P1`  + 1*dddGList$dddGList[['AA5+P1']][,'R>K'])
+modMotifA13P1 <- data.frame(A13 = SELEX_motifs[['AWT']]$`P1`  + AA13P1coef*dddGList$dddGList[['AA13+P1']][,'V>R'])
+modMotifADP1 <- data.frame(AD = SELEX_motifs[['AWT']]$`P1`  + AA13P1coef*dddGList$dddGList[['AA13+P1']][,'V>R'] + AA5P1coef*dddGList$dddGList[['AA5+P1']][,'R>K'])
+
+predTable <- cbind.data.frame(modMotifH5P.1, modMotifH13P.1, modMotifHDP.1, 
+                              modMotifH5P1, modMotifH13P1, modMotifHDP1, 
+                              modMotifA5P.1, modMotifA13P.1, modMotifADP.1,
+                              modMotifA5P1, modMotifA13P1, modMotifADP1)
+
+rownames(predTable) = c('A','C', 'G', 'T')
+rownames(modMotifH13P.1) = c('A','C', 'G', 'T')
+
+
+mononucleotide_logo(as.data.frame(predTable[,2]))
+mononucleotide_logo(as.data.frame(modMotifH13P.1))
+#True
+trueTable <- cbind.data.frame(SELEX_motifs$H5$`P.1`, SELEX_motifs$H13$`P.1`, SELEX_motifs$HD$`P.1`,
+                 SELEX_motifs$H5$`P1`, SELEX_motifs$H13$`P1`, SELEX_motifs$HD$`P1`,
+                 SELEX_motifs$A5$`P.1`, SELEX_motifs$A13$`P.1`, SELEX_motifs$AD$`P.1`,
+                 SELEX_motifs$A5$`P1`, SELEX_motifs$A13$`P1`, SELEX_motifs$AD$`P1`)
+rownames(trueTable) = c('A','C', 'G', 'T')
+
+mononucleotide_logo(trueTable[,c(9,12)])
+WTtable <- cbind.data.frame(SELEX_motifs$HWT$`P.1`,SELEX_motifs$HWT$`P1`,SELEX_motifs$AWT$`P.1`,SELEX_motifs$AWT$`P1`)
+rownames(WTtable) = c('A','C', 'G', 'T')
+mononucleotide_logo(WTtable[,c(3,4)])
+
+#WT table 
+predTable <- cbind.data.frame(SELEX_motifs$HWT$`P.1`, SELEX_motifs$HWT$`P.1`, SELEX_motifs$HWT$`P.1`,
+                              SELEX_motifs$HWT$`P1`, SELEX_motifs$HWT$`P1`, SELEX_motifs$HWT$`P1`,
+                              SELEX_motifs$AWT$`P.1`, SELEX_motifs$AWT$`P.1`, SELEX_motifs$AWT$`P.1`,
+                              SELEX_motifs$AWT$`P1`, SELEX_motifs$AWT$`P1`, SELEX_motifs$AWT$`P1`)
+rownames(predTable) = c('A','C', 'G', 'T')
+
+#plot correlation 
+pred <- unlist(data.frame(apply(predTable, 2, function(column) column - mean(column))))
+true <- unlist(data.frame(apply(trueTable, 2, function(column) column - mean(column))))
+
+#predTable2 <- apply(predTable, 2, function(column) if(min(column) < 0){column + abs(min(column)) + 0.01}else{column})
+#predTable2 <- apply(predTable2, 2, function(column) column / max(column))
+
+#pred <- unlist(data.frame(matrix2tetrahedron(predTable2)))
+#true <- unlist(data.frame(matrix2tetrahedron(trueTable)))
+
+
+#pred <- unlist(data.frame(predTable))
+#true <- unlist(data.frame(trueTable))
+#plot_tetrahedron(trueTable)
+#plot_tetrahedron(predTable2)
+
+predTrue <- data.frame(pred, true)
+
+plot(true, pred,  col = c(rep(1, length(pred)/2), rep(2,length(pred)/2)), pch = 19, xlab = 'Experiment ????G', ylab = 'Predicted ????G', main = 'Mutants vs. Mutants')
+legend( x = "bottomright", legend = c('HES2', 'ASCL2'), col =c(1:2), pch = 19, bty='n')
+lm <- lm(true~pred+0, predTrue)
+summary(lm)
+mean((pred-true)^2)^(1/2)
+
+#test for WT as standards
+result <- parse_json(file = 'E:/Desktop/HB_Rotation_1\\ProBound_run\\HES2_Yin2017\\result/fit.models.consensus.json')
+mono <- result[[2]]$mononucleotide
+mono.df <- cbind.data.frame(name = rows[1:4], mono)
+HHTmono <- mono.df[,c(7,8)]
+
+result <- parse_json(file = 'E:/Desktop/HB_Rotation_1\\ProBound_run\\ASCL2_Yin2017\\result/fit.models.consensus.json')
+mono <- result[[2]]$mononucleotide
+mono.df <- cbind.data.frame(name = rows[1:4], mono)
+AHTmono <- mono.df[,c(7,8)]
+
+posMotif <- 'P.1'
+
+pos_matrix_test <- cbind.data.frame(HWT = SELEX_motifs[['HWT']][,posMotif], AWT = SELEX_motifs[['AWT']][,posMotif],
+                                    HHT = HHTmono[,1], AHT = AHTmono[,1])
+WTexp <- pos_matrix_test[,1:2]
+WTHT <- pos_matrix_test[,3:4]
+
+posMotif <- 'P1'
+
+pos_matrix_test <- cbind.data.frame(HWT = SELEX_motifs[['HWT']][,posMotif], AWT = SELEX_motifs[['AWT']][,posMotif],
+                                    HHT = HHTmono[,2], AHT = AHTmono[,2])
+WTexp <- cbind.data.frame(WTexp, pos_matrix_test[,1:2])
+WTHT <- cbind.data.frame(WTHT, pos_matrix_test[,3:4])
+
+#plot correlation 
+#WTexp <- log(WTexp)
+#WTHT <- log(WTHT)
+exp <- unlist(data.frame(apply(WTexp, 2, function(column) column - mean(column))))
+HT <- unlist(data.frame(apply(WTHT, 2, function(column) column - mean(column))))
+
+#exp <- unlist(data.frame(matrix2tetrahedron(WTexp)))
+#HT <- unlist(data.frame(matrix2tetrahedron(WTHT)))
+
+#exp <- log(unlist(data.frame(WTexp)))
+#HT <- log(unlist(data.frame(WTHT)))
+expHT <- data.frame(exp, HT)
+
+plot(exp, HT, col = c(1,1,1,1,2,2,2,2,1,1,1,1,2,2,2,2), pch = 19, xlab = 'Experiment ????G', ylab = 'High-troughput SELEX ????G', main = 'WT vs. WT')
+legend( x = "bottomright", legend = c('HES2', 'ASCL2'), col =c(1:2), pch = 19, bty='n')
+lm <- lm(exp~HT+0, expHT)
+summary(lm)
+mean((exp-HT)^2)^(1/2)
+
+#check distance within HT experiments
+posMotif <- 'P-1'
+
+ProteinPos <- data.frame(name = bHLH_pbAlignment$name, pos = substr(bHLH_pbAlignment$alignment,AApos,AApos))
+PosAA <- c()
+for(i in 1:length(bHLH_motifs)){
+  PosAA <- c(PosAA, ProteinPos[ProteinPos$name == bHLH_motifs[[i]]$name, 2])
+}
+pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+
+geneList <- strsplit(colnames(pos_matrix), '_')
+geneNames <- c()
+for(i in 1:length(geneList)){
+  geneNames <- c(geneNames, geneList[[i]][1])
+}
+geneNames <- unique(geneNames)
+
+
+P.1HT1 <- data.frame(placeHolder = c(0,0,0,0))
+P.1HT2 <- data.frame(placeHolder = c(0,0,0,0))
+for(i in 1:length(geneNames)){
+  HTList <- grep(geneNames[i], colnames(pos_matrix))
+  if(length(HTList) < 2){
+    next()
+  }
+  P.1HT1 <- cbind.data.frame(P.1HT1, pos_matrix[,HTList[1]])
+  P.1HT2 <- cbind.data.frame(P.1HT2, pos_matrix[,HTList[2]])
+}
+
+posMotif <- 'P1'
+
+ProteinPos <- data.frame(name = bHLH_pbAlignment$name, pos = substr(bHLH_pbAlignment$alignment,AApos,AApos))
+PosAA <- c()
+for(i in 1:length(bHLH_motifs)){
+  PosAA <- c(PosAA, ProteinPos[ProteinPos$name == bHLH_motifs[[i]]$name, 2])
+}
+pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+
+for(i in 1:length(geneNames)){
+  HTList <- grep(geneNames[i], colnames(pos_matrix))
+  if(length(HTList) < 2){
+    next()
+  }
+  P.1HT1 <- cbind.data.frame(P.1HT1, pos_matrix[,HTList[1]])
+  P.1HT2 <- cbind.data.frame(P.1HT2, pos_matrix[,HTList[2]])
+}
+P.1HT1 <- P.1HT1[,-1]
+P.1HT2 <- P.1HT2[,-1]
+
+P.1HT1 <- log(P.1HT1)
+P.1HT2 <- log(P.1HT2)
+HT1 <- unlist(data.frame(apply(P.1HT1, 2, function(column) column - mean(column))))
+HT2 <- unlist(data.frame(apply(P.1HT2, 2, function(column) column - mean(column))))
+
+#HT1 <- unlist(data.frame( matrix2tetrahedron(P.1HT1)))
+#HT2 <- unlist(data.frame(matrix2tetrahedron(P.1HT2)))
+
+#HT1 <- log(unlist(data.frame(P.1HT1)))
+#HT2 <- log(unlist(data.frame(P.1HT2)))
+
+HTdata <- data.frame(HT1, HT2)
+
+plot(HT1, HT2, main = 'Pair-wise experiment comparison', xlab = 'Experiment 1 ????G', ylab = 'Experiment 2 ????G')
+lm <- lm(HT2~HT1+0, HTdata)
+summary(lm)
+mean((HT2-HT1)^2)^(1/2)
+
+#negative control
+AA5P.1coef <- 1
+AA5P1coef <- 1
+AA13P.1coef <- 1
+AA13P1coef <- 1
+
+
+
+modMotifH5P.1 <- data.frame(H5 = SELEX_motifs[['HWT']]$`P.1`  + 1*dddGList$dddGList[['AA5+P-1']][,'K>I'])
+modMotifH13P.1 <- data.frame(H13 = SELEX_motifs[['HWT']]$`P.1`  + AA13P.1coef*dddGList$dddGList[['AA13+P-1']][,'R>M'])
+modMotifHDP.1 <- data.frame(HD = SELEX_motifs[['HWT']]$`P.1`  + AA13P.1coef*dddGList$dddGList[['AA13+P-1']][,'R>M'] + AA5P.1coef*dddGList$dddGList[['AA5+P-1']][,'K>R'])
+modMotifH5P1 <- data.frame(H5 = SELEX_motifs[['HWT']]$`P1`  + 1*dddGList$dddGList[['AA5+P1']][,'K>I'])
+modMotifH13P1 <- data.frame(H13 = SELEX_motifs[['HWT']]$`P1`  + AA13P1coef*dddGList$dddGList[['AA13+P1']][,'R>M'])
+modMotifHDP1 <- data.frame(HD = SELEX_motifs[['HWT']]$`P1`  + AA13P1coef*dddGList$dddGList[['AA13+P1']][,'R>M'] + AA5P1coef*dddGList$dddGList[['AA5+P1']][,'K>I'])
+
+modMotifA5P.1 <- data.frame(A5 = SELEX_motifs[['AWT']]$`P.1`  + 1*dddGList$dddGList[['AA5+P-1']][,'R>I'])
+modMotifA13P.1 <- data.frame(A13 = SELEX_motifs[['AWT']]$`P.1`  + AA13P.1coef*dddGList$dddGList[['AA13+P-1']][,'V>M'])
+modMotifADP.1 <- data.frame(AD = SELEX_motifs[['AWT']]$`P.1`  + AA13P.1coef*dddGList$dddGList[['AA13+P-1']][,'V>M'] + AA5P1coef*dddGList$dddGList[['AA5+P-1']][,'R>I'])
+modMotifA5P1 <- data.frame(A5 = SELEX_motifs[['AWT']]$`P1`  + 1*dddGList$dddGList[['AA5+P1']][,'R>I'])
+modMotifA13P1 <- data.frame(A13 = SELEX_motifs[['AWT']]$`P1`  + AA13P1coef*dddGList$dddGList[['AA13+P1']][,'V>M'])
+modMotifADP1 <- data.frame(AD = SELEX_motifs[['AWT']]$`P1`  + AA13P1coef*dddGList$dddGList[['AA13+P1']][,'V>M'] + AA5P1coef*dddGList$dddGList[['AA5+P1']][,'R>I'])
+
+predTable <- cbind.data.frame(modMotifH5P.1, modMotifH13P.1, modMotifHDP.1, 
+                              modMotifH5P1, modMotifH13P1, modMotifHDP1, 
+                              modMotifA5P.1, modMotifA13P.1, modMotifADP.1,
+                              modMotifA5P1, modMotifA13P1, modMotifADP1)
+rownames(predTable) = c('A','C', 'G', 'T')
+
+mononucleotide_logo(predTable[])
+
+#True
+trueTable <- cbind.data.frame(SELEX_motifs$H5$`P.1`, SELEX_motifs$H13$`P.1`, SELEX_motifs$HD$`P.1`,
+                              SELEX_motifs$H5$`P1`, SELEX_motifs$H13$`P1`, SELEX_motifs$HD$`P1`,
+                              SELEX_motifs$A5$`P.1`, SELEX_motifs$A13$`P.1`, SELEX_motifs$AD$`P.1`,
+                              SELEX_motifs$A5$`P1`, SELEX_motifs$A13$`P1`, SELEX_motifs$AD$`P1`)
+rownames(predTable) = c('A','C', 'G', 'T')
+
+mononucleotide_logo(predTable[,c(2,5)])
+
+#True
+trueTable <- cbind.data.frame(SELEX_motifs$H5$`P.1`, SELEX_motifs$H13$`P.1`, SELEX_motifs$HD$`P.1`,
+                              SELEX_motifs$H5$`P1`, SELEX_motifs$H13$`P1`, SELEX_motifs$HD$`P1`,
+                              SELEX_motifs$A5$`P.1`, SELEX_motifs$A13$`P.1`, SELEX_motifs$AD$`P.1`,
+                              SELEX_motifs$A5$`P1`, SELEX_motifs$A13$`P1`, SELEX_motifs$AD$`P1`)
+rownames(trueTable) = c('A','C', 'G', 'T')
+
+mononucleotide_logo(trueTable[,c(3,6)])
+
+#plot correlation 
+pred <- unlist(data.frame(apply(predTable, 2, function(column) column - mean(column))))
+true <- unlist(data.frame(apply(trueTable, 2, function(column) column - mean(column))))
+
+#predTable2 <- apply(predTable, 2, function(column) if(min(column) < 0){column + abs(min(column)) + 0.01}else{column})
+#predTable2 <- apply(predTable2, 2, function(column) column / max(column))
+
+#pred <- unlist(data.frame(matrix2tetrahedron(predTable2)))
+#true <- unlist(data.frame(matrix2tetrahedron(trueTable)))
+
+
+#pred <- unlist(data.frame(predTable))
+#true <- unlist(data.frame(trueTable))
+#plot_tetrahedron(trueTable)
+#plot_tetrahedron(predTable2)
+
+predTrue <- data.frame(pred, true)
+
+plot(pred, true, col = c(rep(1, length(pred)/2), rep(2,length(pred)/2)))
+lm <- lm(true~pred+0, predTrue)
+summary(lm)
+mean((pred-true)^2)^(1/2)
+
+
+####search of best dddG for CG2GC mutation####
+namePair <- c()
+P.1List <- c()
+P1List <- c()
+for(i in 1:length(dddGList)){
+  info <- strsplit(names(dddGList)[i], '\\+')
+  AAPos <- info[[1]][1]
+  
+  
+  if(info[[1]][2] == 'P-1'){
+    dddGdiff <- as.numeric(dddGList[[i]][3,])
+    namePair <- c(namePair, paste0(AAPos, ':', names(dddGList[[i]])))
+    P.1List <- c(P.1List, dddGdiff)
+  }else{
+    dddGdiff <- as.numeric(dddGList[[i]][2,])
+    P1List <- c(P1List, dddGdiff)
+  }
+}
+dddGRank <- data.frame(mutation = namePair, P.1 = P.1List, P1 = P1List, frequency)
+
+Rank <- dplyr::arrange(dddGRank, desc(P1*P.1))
+Rank <- Rank[Rank$frequency > 500,]
+
+
+#HT predition-validation
+predM <- c()
+TrueM <- c()
+benchMarkM <- c()
+testM <- c()
+
+
+posMotif <- 'P-1'
+
+ProteinPos <- data.frame(name = bHLH_pbAlignment$name, pos = substr(bHLH_pbAlignment$alignment,AApos,AApos))
+PosAA <- c()
+for(i in 1:length(bHLH_motifs)){
+  PosAA <- c(PosAA, ProteinPos[ProteinPos$name == bHLH_motifs[[i]]$name, 2])
+}
+pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+
+Test <- 'Tcf21__Jolma2013'                     #Tcf21__Jolma2013'BHLHE22_Jolma2013
+True <- 'TFEB_Jolma2013'                       #'TFEB_Jolma2013'Atoh1__Jolma2013
+benchMark <- 'TFEB_Yin2017'                    #'TFEB_Yin2017'Atoh1__Yang2017
+
+TestCol <- which(colnames(pos_matrix) == Test)
+TrueCol <- which(colnames(pos_matrix) == True)
+benchMarkCol <- which(colnames(pos_matrix) == benchMark)
+
+TestMatrix <- data.frame(pos_matrix[,Test])
+TrueMatrix <- data.frame(pos_matrix[,True])
+benchMarkMatrix <- data.frame(pos_matrix[,benchMark])
+
+predMatrix <- predict.ddG(TestMatrix, bHLH_pbAlignment_backup[bHLH_pbAlignment_backup$name == Test, 2], bHLH_pbAlignment_backup[bHLH_pbAlignment_backup$name == True, 2],
+            dddGList = form.dddGList(bHLH_pbAlignment_backup, bHLH_motifs_backup, leaveOut = c('Tcf21', 'TFEB')), posMotif = posMotif, includeChisquare = T)
+
+
+predM <- c(predM, unlist(data.frame(apply(predMatrix, 2, function(column) column - mean(column)))))
+TrueM <- c(TrueM, unlist(data.frame(apply(log(TrueMatrix), 2, function(column) column - mean(column)))))
+benchMarkM <- c(benchMarkM, unlist(data.frame(apply(log(benchMarkMatrix), 2, function(column) column - mean(column)))))
+testM <- c(testM, unlist(data.frame(apply(log(TestMatrix), 2, function(column) column - mean(column)))))
+
+
+
+dt <- data.frame(predM, TrueM, benchMarkM, testM)
+plot(TrueM, predM, main = 'Predicted TFEB vs. TFEB (Jolma 2013)', xlab = 'Jolma2013 ????G', ylab = 'Predicted ????G')
+summary(lm(predM~TrueM, dt))
+mean((TrueM-predM)^2)^(1/2)
+
+
+plot(TrueM, benchMarkM, main = 'TFEB (Yin 2017) vs. TFEB (Jolma 2013)', xlab = 'Jolma2013 ????G', ylab = 'Yin2017 ????G')
+summary(lm(benchMarkM~TrueM, dt))
+mean((TrueM-benchMarkM)^2)^(1/2)
+
+#output plots
+P1Test <- log(TestMatrix)
+P1True <- log(TrueMatrix)
+P1pred <- predMatrix
+P1dddG13 <- data.frame(dddGList$dddGList$`AA13+P1`$`M>R`)
+P1dddG14 <- data.frame(dddGList$dddGList$`AA14+P1`$`R>F`)
+P1dddG5 <- data.frame(dddGList$dddGList$`AA5+P1`$`A>H`)
+P1dddG8 <- data.frame(dddGList$dddGList$`AA8+P1`$`R>I`)
+
+P.1Test <- log(TestMatrix)
+P.1True <- log(TrueMatrix)
+P.1pred <- predMatrix
+
+P.1dddG13 <- data.frame(dddGList$dddGList$`AA13+P-1`$`M>R`)
+P.1dddG14 <- data.frame(dddGList$dddGList$`AA14+P-1`$`R>F`)
+P.1dddG5 <- data.frame(dddGList$dddGList$`AA5+P-1`$`A>H`)
+P.1dddG8 <- data.frame(dddGList$dddGList$`AA8+P-1`$`R>I`)
+
+plotMatrix <- data.frame(P.1 = TrueM[1:4], P1 = TrueM[5:8])
+row.names(plotMatrix) <- c('A','C','G','T')
+mononucleotide_logo(plotMatrix)
+
+
+
+####chisquare test for dependence####
+bHLH_pbAlignment_backup <- bHLH_pbAlignment
+#start here
+bHLH_pbAlignment <- bHLH_pbAlignment_backup
+bHLH_pbAlignment <- bHLH_pbAlignment[-grep('Tcf21', bHLH_pbAlignment$name),]
+bHLH_pbAlignment <- bHLH_pbAlignment[-grep('TFEB', bHLH_pbAlignment$name),]
+
+
+bHLH_motifs <- list()
+for(i in 1:length(monodi_motifs)){
+  add <- list(name = monodi_motifs[[i]]$name, matrix = monodi_motifs[[i]]$monoMatrix)
+  if(length(grep('Tcf21',add$name)) == 0 && length(grep('TFEB',add$name)) == 0){
+    bHLH_motifs <- rlist::list.append(bHLH_motifs, add)
+  }else{
+    print(add$name)
+  }
+  
+}
+length(bHLH_motifs)
+
+posList <- c(13,14,5,26,8)#c(13,14,5,26,53,16,8, 17)
+AAtypes <- data.frame(placeHolder = c(1:length(bHLH_motif)))
+for(i in 1:length(posList)){
+  AApos <- posList[i]
+  addPos <- substr(bHLH_pbAlignment$alignment,AApos,AApos)
+  AAtypes <- cbind.data.frame(AAtypes, addPos)
+}
+AAtypes <- AAtypes[,-1]
+colnames(AAtypes) <- paste0('AA', posList)
+
+frequency <- c()
+frequencyName <- c()
+Chi.pval <- c()
+dddGList <- list()
+for(p in 1:length(posList)){
+  AApos <- posList[p]
+  for(posMotif in c('P1', 'P-1')){
+    ProteinPos <- data.frame(name = bHLH_pbAlignment$name, pos = substr(bHLH_pbAlignment$alignment,AApos,AApos))
+    PosAA <- c()
+    for(i in 1:length(bHLH_motifs)){
+      PosAA <- c(PosAA, ProteinPos[ProteinPos$name == bHLH_motifs[[i]]$name, 2])
+    }
+    pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+    colnames(pos_matrix) <- PosAA
+    AAs <- unique(colnames(pos_matrix))
+    dddGdf <- data.frame(placeHolder = c(0,0,0,0))
+    for(aa1 in AAs){
+      for(aa2 in AAs){
+        if(aa2 != aa1){
+          if(!tetrahedronCenter){
+            mean1 <- data.frame(ddG = apply(data.frame(pos_matrix[,colnames(pos_matrix) == aa1]), 1, function(row) mean(row)))
+            mean2 <- data.frame(ddG = apply(data.frame(pos_matrix[,colnames(pos_matrix) == aa2]), 1, function(row) mean(row)))
+          }else{
+            mean1 <- data.frame(ddG = apply(data.frame(matrix2tetrahedron(pos_matrix[,colnames(pos_matrix) == aa1])), 2, function(column) mean(column)))
+            mean2 <- data.frame(ddG = apply(data.frame(matrix2tetrahedron(pos_matrix[,colnames(pos_matrix) == aa2])), 2, function(column) mean(column)))
+            mean1 <- unlist(mean1)%*%ittm
+            mean2 <- unlist(mean2)%*%ittm
+            mean1 <- data.frame(ddG = as.numeric(mean1))
+            mean2 <- data.frame(ddG = as.numeric(mean2))
+          }
+          mean1 <- mean1 - max(mean1) + 1
+          mean2 <- mean2 - max(mean2) + 1
+          mean1 <- log(mean1)
+          mean2 <- log(mean2)
+          dddG <- data.frame(mean2 - mean1)
+          
+          minChipVal <- 1
+          if(p > 1 ){
+            for(c in 1:(p-1)){
+              newChipVal <- AAChiSquare(AAtypes[,p], AAtypes[,c], aa1, aa2, table = T)
+              print(newChipVal)
+              if(newChipVal < minChipVal){
+                minChipVal <- newChipVal
+              }
+            }
+          }
+
+          
+          colnames(dddG) <- paste0(aa1, '>', aa2)
+          dddGdf <- cbind.data.frame(dddGdf, minChipVal*dddG)
+          
+
+          if(posMotif == 'P-1'){
+            frequency <- c(frequency, ncol(data.frame(pos_matrix[,colnames(pos_matrix) == aa1])) * ncol(data.frame((pos_matrix[,colnames(pos_matrix) == aa2]))))
+            frequencyName <- c(frequencyName, paste0('AA', AApos,':', aa1, '>', aa2))
+          }
+        }
+      }
+    }
+    dddGdf <- dddGdf[,-1]
+    dfName <- paste0('AA', AApos, '+', posMotif)
+    dddGList[[dfName]] <- dddGdf
+  }
+}
+frequencyList <- data.frame(frequencyName, frequency)
+
+####fucntion test ####
+referenceMatrix <- TestMatrix
+referenceSequence <- bHLH_pbAlignment_backup[bHLH_pbAlignment_backup $name == "Tcf21__Jolma2013", 2]
+targetSequence <- bHLH_pbAlignment_backup[bHLH_pbAlignment_backup $name == "TFEB_Jolma2013", 2]
+dddGList <- form.dddGList(bHLH_pbAlignment_backup, bHLH_motifs_backup, leaveOut = c())
+
+predict.ddG(referenceMatrix, referenceSequence, targetSequence, dddGList)
+
+
+####pair-wise HT selex prediction validation####
+posMotif <- 'P-1'
+
+ProteinPos <- data.frame(name = bHLH_pbAlignment$name, pos = substr(bHLH_pbAlignment$alignment,AApos,AApos))
+PosAA <- c()
+for(i in 1:length(bHLH_motifs)){
+  PosAA <- c(PosAA, ProteinPos[ProteinPos$name == bHLH_motifs[[i]]$name, 2])
+}
+pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+
+geneList <- strsplit(colnames(pos_matrix), '_')
+geneNames <- c()
+for(i in 1:length(geneList)){
+  geneNames <- c(geneNames, geneList[[i]][1])
+}
+geneNames <- unique(geneNames)
+
+predList <- c()
+TrueList <- c()
+rank <- c()
+keyPos = c(13,14,5,8)
+test.no <- 50
+#fromPs <- sample(1:length(geneNames), test.no)
+#toPs <- sample(1:length(geneNames), test.no)
+for(a in 1:test.no){
+  i <- fromPs[a]
+  j <- toPs[a]
+  if(i != j){
+    pFrom <- grep(geneNames[i], colnames(pos_matrix))[1]
+    pTo <- grep(geneNames[j], colnames(pos_matrix))[1]
+    entryFrom <- colnames(pos_matrix)[pFrom]
+    entryTo <- colnames(pos_matrix)[pTo]
+    referenceMatrix <- data.frame(pos_matrix[,entryFrom])
+    targetMatrix <- data.frame(pos_matrix[,entryTo])
+    referenceSequence <- bHLH_pbAlignment[bHLH_pbAlignment$name == entryFrom,2]
+    targetSequence <- bHLH_pbAlignment[bHLH_pbAlignment$name == entryTo,2]
+    dddGList <- form.dddGList(bHLH_pbAlignment, bHLH_motifs, leaveOut = c(geneNames[i], geneNames[j]), keyPos = keyPos)
+    predictedMatrix <- predict.ddG(referenceMatrix, referenceSequence, targetSequence, dddGList, posMotif = 'P-1', keyPos = keyPos, includeChisquare = T)
+    baseRank <- row.names(arrange(targetMatrix, desc(pos_matrix...entryTo.)))
+    rank <- c(rank, grep(row.names(predictedMatrix)[predictedMatrix == max(predictedMatrix)], baseRank))
+    predList <- c(predList, unlist(predictedMatrix))
+    TrueList <- c(TrueList, unlist(data.frame(apply(log(targetMatrix), 2, function(column) column - mean(column)))))
+  }
+}
+
+rank1 <- rank
+dt <- data.frame(TrueList, predList)
+plot(TrueList, predList, main = 'Pair-wise prediction test', xlab = 'Experiment ????G', ylab = 'Predicted ????G')
+summary(lm(predList~TrueList, dt))
+mean((TrueList-predList)^2)^(1/2)
+
+
+####plot p-value heatmap####
+bHLH_log10pVal_Pos <- read.csv("E:/Desktop/HB_Rotation_1/Base_Shape_rec/bHLH_log10pVal_Pos.csv", row.names=1)
+bHLH_log10pVal_Pos[is.na(bHLH_log10pVal_Pos)] <- 0
+gplots::heatmap.2(as.matrix(as.data.frame(lapply(bHLH_log10pVal_Pos, as.numeric))),dendrogram='none', Rowv=FALSE, Colv=FALSE,trace='none',col = rev(heat.colors(12)))
+heatmap(as.matrix(as.data.frame(lapply(bHLH_log10pVal_Pos, as.numeric))))
+
+
+

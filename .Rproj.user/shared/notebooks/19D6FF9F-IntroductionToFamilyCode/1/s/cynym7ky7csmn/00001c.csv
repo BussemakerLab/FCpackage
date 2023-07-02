@@ -1,0 +1,4 @@
+"0","Motif_Table <- loadMono_motifs(bHLH_index, modelFile_Template, rec_seq = 'CANNTG', pos_index = c('P-3','P-2','P-1','P1','P2','P3'), checkSymmetry = T, withTable = T)"
+"0",""
+"0","mono_motifs <- Motif_Table$motifs"
+"0","bHLH_model_info <- Motif_Table$table"
