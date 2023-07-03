@@ -15,9 +15,19 @@ Imports:
   dplyr,
   data.table,
   plotly,
-  RJSONIO,
   processx,
   umap,
   rjson,
-  RJSONIO
+  RJSONIO,
+  gplots,
+  ggseqlogo,
+  ggplot2,
+  scales,
+  MASS,
+  glmnet,
+  lsa,
+  proteinStructureBoost,
+  rlist,
+  stats,
+  utils
   

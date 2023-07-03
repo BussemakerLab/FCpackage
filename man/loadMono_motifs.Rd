@@ -34,5 +34,6 @@ list mono_motifs.}
 List of motifs in mono_motifs, also an info table if withTable == T
 }
 \description{
-Load binding motifs from dir containing ProBound results
+Load binding motifs from dir containing ProBound results, the model with the highest
+consensus sequence recognition score will be added to the resulting list
 }

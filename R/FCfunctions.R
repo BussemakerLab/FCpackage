@@ -848,6 +848,8 @@ concatAli <- function(Ali, start = 1, length = nchar(Ali[1,2])){
 #' @param pos_index Position names of the consensus sequence
 #' @param checkSymmetry To check symmetry like bHLH protein, should be changed for families other than bHLH
 #' @param withTable If true, output with bHLH_index table with scoring and model number; if false, only output
+#' @param useMode List of binding modes to use, if left empty, the highest scored mode according to rec_seq
+#' will be used.
 #' list mono_motifs.
 #' @return List of motifs in mono_motifs, also an info table if withTable == T
 #' @export
@@ -856,7 +858,8 @@ loadMono_motifs <- function(bHLH_index,
                             rec_seq = 'CANNTG',
                             pos_index = c('P-3','P-2','P-1','P1','P2','P3'),
                             checkSymmetry = FALSE,
-                            withTable = TRUE){
+                            withTable = TRUE,
+                            useMode = c()){
   mono_motifs <- list()
   motif_model <- c()
   symmetry <- c()
@@ -886,7 +889,11 @@ loadMono_motifs <- function(bHLH_index,
           m <- m+1
         }
       }
-      bestIndex <- which(score == max(score))[1]
+      if(length(useMode) == 0){
+        bestIndex <- which(score == max(score))[1]
+      }else{
+        bestIndex <- useMode[i]
+      }
       motif_model <- c(motif_model, bestIndex)
       model_score <- c(model_score, score[bestIndex])
       JSON_matrix_motif <- JSON_matrix_motif[[bestIndex]]
@@ -895,7 +902,7 @@ loadMono_motifs <- function(bHLH_index,
 
       if(checkSymmetry){
         #check for symmetry, specific for bHLH can be deleted is not relevant
-        if(abs(sum(JSON_matrix_motif[,3] - JSON_matrix_motif[c(4,3,2,1),4])) < 1e-10){
+        if(abs(sum(JSON_matrix_motif[,1:(ncol(JSON_matrix_motif)/2)]) - sum(JSON_matrix_motif[,(ncol(JSON_matrix_motif)/2 + 1):(ncol(JSON_matrix_motif))])) < 1e-10){
           symmetry <- c(symmetry, 1)
         }else{
           symmetry <- c(symmetry, 0)
@@ -994,7 +1001,7 @@ getPvalTable <- function(mono_motifs, Alignment, pos_index = c('P-3','P-2','P-1'
       df <- matrix2tetrahedron(pos_matrix)
 
       df <- data.frame(AA = PosAA, A = df[,1], C = df[,2], G = df[,3])
-      man.test <- manova(cbind(A,C,G) ~ AA, data = df)
+      man.test <- stats::manova(cbind(A,C,G) ~ AA, data = df)
 
       summary <- summary(man.test, tol=0)
       p.val <- summary$stats[1,6]
@@ -1060,7 +1067,7 @@ matchAliMotif <- function(mono_motifs, Alignment){
 #'
 #' Creating a matrix of position-specific motif matrix at a given motif position,
 #' colname labeled with the residue type at a given alignment position.
-#' @param mono_motifs List of motifs output from loadMono_motifs
+#' @param mono_motifs List of motifs output from loadMono_motifs()
 #' @param Alignment Data frame of Alignment from concatAli
 #' @param AApos Position of residue along the protien alignment
 #' @param motifPos Position of motif
@@ -1080,9 +1087,12 @@ AAbpCombination <- function(mono_motifs, Alignment, AApos, motifPos){
 #' @param base_colors Color of bases at the vertexes
 #' @param size Size of dots in the tetrahedron
 #' @param axis True to show axis
+#' @param label Show label of data points according to colnames of posMatrix
+#' @param color Color sample points according to AA identity, only when colnames of posMatrix are 1 letter AA identifiers
 #' @return 3D Plotly plot
 #' @export
-plot_tetrahedron <- function(JSON_matrix, base_colors = c('green','blue','orange','red'), size = 5, axis = FALSE, label = F, color = F){
+plot_tetrahedron <- function(posMatrix, base_colors = c('green','blue','orange','red'), size = 5, axis = FALSE, label = F, color = F){
+  JSON_matrix <- posMatrix
   if(color){
     resis <- unique(colnames(JSON_matrix))
     resiColors <- AAcolor(resis)
@@ -1236,14 +1246,41 @@ gene2pos <- function(motifs, pos = 'P1', nrow = 4){
   return(out)
 }
 
+#' Plot 4-way tetrahedron
+#'
+#' Looking at a tetrahedron representation system from the 4 vertexes and plot all data samples at a given motif position
+#' @param posMatrix Matrix of binding motifs at a specific motif position, result of gene2pos()
+#' @param base_colors Color of bases at the vertexes
+#' @param size Size of dots in the tetrahedron
+#' @param label Show label of data points according to colnames of posMatrix
+#' @param color Color sample points according to AA identity, only when colnames of posMatrix are 1 letter AA identifiers
+#' @return 3D Plotly plot
+#' @export
+plot_4Graph <- function(posMatrix, base_colors = c('green','blue','orange','red'), size = 5, label = F, color = F){
+  JSON_matrix <- posMatrix
+  if(color){
+    resis <- unique(colnames(JSON_matrix))
+    resiColors <- AAcolor(resis)
+  }else{
+    resiColors <- '#000000'
+  }
 
-plot_4Graph <- function(JSON_matrix, base_colors = c('green','blue','orange','red'), size = 5){
-  library(plotly)
   #transform to 3d space
   tetra_trans_matrix <- matrix(data = c(1,1,1,1,-1,-1,-1,1,-1,-1,-1,1), nrow = 4, ncol = 3, byrow = TRUE)
   df <- normalize_sum1(t(JSON_matrix)) %*% tetra_trans_matrix
+  AAtype <- rownames(df)
   df <- as.data.frame(df)
-  df <- cbind.data.frame(df, name = rownames(df))
+  df <- cbind.data.frame(df, name = AAtype)
+  colLen <- length(resiColors)
+  colorNum <- as.factor(df$name)
+  resiCol <- c()
+  for(i in 1:length(colorNum)){
+    index <- as.numeric(colorNum[i])%%colLen
+    if(index == 0){
+      index <- colLen
+    }
+    resiCol <- c(resiCol, resiColors[index])
+  }
   #create tetrahedron
   tetrahedron <-  matrix(data = c(1,1,1,1,-1,-1,-1,1,-1,-1,-1,1,1,1,1,-1,1,-1,1,-1,-1,-1,-1,1), nrow = 8, ncol = 3, byrow = TRUE)
   tetrahedron <- as.data.frame(tetrahedron)
@@ -1272,7 +1309,7 @@ plot_4Graph <- function(JSON_matrix, base_colors = c('green','blue','orange','re
               line = list(width = 1),
               opacity = 0.5,
               name = 'tetrahedron')%>%
-    add_trace(df, x = df[1:len,1], y=df[1:len,2],z=df[1:len,3], color = I('black'),
+    add_trace(df, x = df[1:len,1], y=df[1:len,2],z=df[1:len,3], color = I(resiCol),
               type = 'scatter3d',
               mode = 'markers',
               size = size,
@@ -1292,15 +1329,18 @@ plot_4Graph <- function(JSON_matrix, base_colors = c('green','blue','orange','re
               type = 'scatter3d',
               mode = 'markers',
               marker = list(size = size, opacity = 1),
-              name = base_names[4])%>%
-    add_trace(df, x = df[1:len,1], y=df[1:len,2],z=df[1:len,3],
-              type = 'scatter3d',
-              mode = 'text',
-              text = df[1:len, 4],
-              textposition = 'top',
-              name = 'label',
-              textfont = list(color = 'grey', size = size*2),
-              opacity = 0.5)
+              name = base_names[4])
+  if(label){
+    plotA <- plotA%>%add_trace(df, x = df[1:len,1], y=df[1:len,2],z=df[1:len,3],
+                               type = 'scatter3d',
+                               mode = 'text',
+                               text = df[1:len, 4],
+                               textposition = 'top',
+                               name = 'label',
+                               textfont = list(color = 'grey', size = size*2),
+                               opacity = 0.5)
+  }
+
 
   #plot 3d graph C
   plotC <- plot_ly(scene = 'scene2')%>%
@@ -1312,7 +1352,7 @@ plot_4Graph <- function(JSON_matrix, base_colors = c('green','blue','orange','re
               line = list(width = 1),
               opacity = 0.5,
               name = 'tetrahedron')%>%
-    add_trace(df, x = df[1:len,1], y=df[1:len,2],z=df[1:len,3], color = I('black'),
+    add_trace(df, x = df[1:len,1], y=df[1:len,2],z=df[1:len,3], color = I(resiCol),
               type = 'scatter3d',
               mode = 'markers',
               size = size,
@@ -1332,15 +1372,18 @@ plot_4Graph <- function(JSON_matrix, base_colors = c('green','blue','orange','re
               type = 'scatter3d',
               mode = 'markers',
               marker = list(size = size, opacity = 1),
-              name = base_names[4])%>%
-    add_trace(df, x = df[1:len,1], y=df[1:len,2],z=df[1:len,3],
-              type = 'scatter3d',
-              mode = 'text',
-              text = df[1:len, 4],
-              textposition = 'top',
-              name = 'label',
-              textfont = list(color = 'grey', size = size*2),
-              opacity = 0.5)
+              name = base_names[4])
+  if(label){
+    plotC <- plotC%>%add_trace(df, x = df[1:len,1], y=df[1:len,2],z=df[1:len,3],
+                               type = 'scatter3d',
+                               mode = 'text',
+                               text = df[1:len, 4],
+                               textposition = 'top',
+                               name = 'label',
+                               textfont = list(color = 'grey', size = size*2),
+                               opacity = 0.5)
+  }
+
 
   #plot 3d graph T
   plotT <- plot_ly(scene = 'scene4')%>%
@@ -1352,7 +1395,7 @@ plot_4Graph <- function(JSON_matrix, base_colors = c('green','blue','orange','re
               line = list(width = 1),
               opacity = 0.5,
               name = 'tetrahedron')%>%
-    add_trace(df, x = df[1:len,1], y=df[1:len,2],z=df[1:len,3], color = I('black'),
+    add_trace(df, x = df[1:len,1], y=df[1:len,2],z=df[1:len,3], color = I(resiCol),
               type = 'scatter3d',
               mode = 'markers',
               size = size,
@@ -1372,15 +1415,18 @@ plot_4Graph <- function(JSON_matrix, base_colors = c('green','blue','orange','re
               type = 'scatter3d',
               mode = 'markers',
               marker = list(size = size, opacity = 1),
-              name = base_names[3])%>%
-    add_trace(df, x = df[1:len,1], y=df[1:len,2],z=df[1:len,3],
-              type = 'scatter3d',
-              mode = 'text',
-              text = df[1:len, 4],
-              textposition = 'top',
-              name = 'label',
-              textfont = list(color = 'grey', size = size*2),
-              opacity = 0.5)
+              name = base_names[3])
+  if(label){
+    plotT <- plotT%>%add_trace(df, x = df[1:len,1], y=df[1:len,2],z=df[1:len,3],
+                               type = 'scatter3d',
+                               mode = 'text',
+                               text = df[1:len, 4],
+                               textposition = 'top',
+                               name = 'label',
+                               textfont = list(color = 'grey', size = size*2),
+                               opacity = 0.5)
+  }
+
 
   #reverse G plot
   tetra_trans_matrix <- matrix(data = c(1,-1,-1,1,1,1,-1,-1,1,-1,1,-1), nrow = 4, ncol = 3, byrow = TRUE)
@@ -1397,7 +1443,7 @@ plot_4Graph <- function(JSON_matrix, base_colors = c('green','blue','orange','re
               line = list(width = 1),
               opacity = 0.5,
               name = 'tetrahedron')%>%
-    add_trace(df, x = df[1:len,1], y=df[1:len,2],z=df[1:len,3], color = I('black'),
+    add_trace(df, x = df[1:len,1], y=df[1:len,2],z=df[1:len,3], color = I(resiCol),
               type = 'scatter3d',
               mode = 'markers',
               size = size,
@@ -1417,15 +1463,18 @@ plot_4Graph <- function(JSON_matrix, base_colors = c('green','blue','orange','re
               type = 'scatter3d',
               mode = 'markers',
               marker = list(size = size, opacity = 1),
-              name = base_names[3])%>%
-    add_trace(df, x = df[1:len,1], y=df[1:len,2],z=df[1:len,3],
-              type = 'scatter3d',
-              mode = 'text',
-              text = df[1:len, 4],
-              textposition = 'top',
-              name = 'label',
-              textfont = list(color = 'grey', size = size*2),
-              opacity = 0.5)
+              name = base_names[3])
+  if(label){
+    plotG2 <- plotG2%>%add_trace(df, x = df[1:len,1], y=df[1:len,2],z=df[1:len,3],
+                               type = 'scatter3d',
+                               mode = 'text',
+                               text = df[1:len, 4],
+                               textposition = 'top',
+                               name = 'label',
+                               textfont = list(color = 'grey', size = size*2),
+                               opacity = 0.5)
+  }
+
 
   plot4 <- subplot(plotA, plotC, plotG2, plotT)%>%
     layout(scene = list(domain=list(x=c(0,0.5),y=c(0,0.5)),
@@ -1448,81 +1497,137 @@ plot_4Graph <- function(JSON_matrix, base_colors = c('green','blue','orange','re
   return(plot4)
 }
 
-
+#' Matrix to Tetrahedron
+#'
+#' Change a frequency matrix into tetrahedron matrix
+#' @param matrix A frequency matrix with 4 rows corresponding to the 4 bases ACGT
+#' @return A tetrahedron matrix with 3 columns representing the xyz coordinates
+#' @export
 matrix2tetrahedron <- function(matrix){
   tetra_trans_matrix <- matrix(data = c(1,1,1,1,-1,-1,-1,1,-1,-1,-1,1), nrow = 4, ncol = 3, byrow = TRUE)
+  colnames(tetra_trans_matrix) <- c('x','y','z')
   return(normalize_sum1(t(matrix)) %*% tetra_trans_matrix)
 }
 
-mononucleotide_logo <- function(pwm, type="energy", axes=TRUE, reverse=FALSE,
+#' Mono-nucleotide logo
+#'
+#' Create the logo of a mono-nucleotide binding matrix
+#' @param matrix Binding matrix in either energy, frequency, or information bit.
+#' @param type One of 'energy', 'info', prob'
+#' @param axes To show axes or not
+#' @param motifPos To show reverse strand or not
+#' @param labels To show labels or not
+#' @return A binding motif logo
+#' @export
+mononucleotide_logo <- function(matrix, type="energy", axes=TRUE, reverse=FALSE,
                                 labels=TRUE) {
+  suppressWarnings({
+    pwm <- matrix
+    letter_complement <- c('T','G','C','A')
+    pwm <- apply(pwm, 2, function(column) column - mean(column))
 
-  pwm <- apply(pwm, 2, function(column) column - mean(column))
 
-
-  if (type == "info") {
-    pwm <- exp(pwm)
-  }
-
-  if (type == "prob") {
-    pwm <- apply(exp(pwm), 2, function(column) column / sum(column))
-  }
-
-  if (reverse) {
-    pwm <- pwm[, rev(seq_len(ncol(pwm)))]
-
-    if (is.null(dim(pwm))) {
-      pwm <- matrix(pwm, length(pwm), 1)
+    if (type == "info") {
+      pwm <- exp(pwm)
     }
 
-    rownames(pwm) <- letter_complement
-  }
-
-  if (type == "energy") {
-    plot <- ggseqlogo(pwm, method = "c", font = font, col_scheme = col_scheme) +
-      list(labs(x = NULL, y = NULL),
-           annotate("rect", xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = 0,
-                    alpha = 0.5, fill = "white"),
-           scale_y_continuous(breaks = pretty_breaks()),
-           geom_hline(yintercept = 0), alltheme)
-
-    if (labels) {
-      plot <- plot + ylab(expression(paste(Delta, Delta, Delta, "G/RT")))
+    if (type == "prob") {
+      pwm <- apply(exp(pwm), 2, function(column) column / sum(column))
     }
-  }
 
-  if (type == "info") {
-    plot <- ggseqlogo(pwm, method = "b", font = font, col_scheme = col_scheme) +
-      list(labs(x = NULL, y = NULL),
-           scale_y_continuous(breaks = pretty_breaks()), alltheme)
+    if (reverse) {
+      pwm <- pwm[, rev(seq_len(ncol(pwm)))]
 
-    if (labels) {
-      plot <- plot + ylab("Bits")
+      if (is.null(dim(pwm))) {
+        pwm <- matrix(pwm, length(pwm), 1)
+      }
+
+      rownames(pwm) <- letter_complement
     }
-  }
+    col_scheme <- ggseqlogo::make_col_scheme(chars = c("A", "C", "G", "T"),
+                                             cols = c("#5CC93B", "#0D00C4", "#F4B63F", "#BB261A"))
+    alltheme   <- ggplot2::theme_bw() + ggplot2::theme(text = ggplot2::element_text(size = 23),
+                                                       axis.line       = ggplot2::element_line(color = "black", size = 1),
+                                                       axis.ticks      = ggplot2::element_line(color = "black", size = 1),
+                                                       panel.border    = ggplot2::element_blank(), panel.grid = ggplot2::element_blank(),
+                                                       legend.position = "none")
+    no_axes    <- list(theme(line            = ggplot2::element_blank(),
+                             rect            = ggplot2::element_blank(),
+                             text            = ggplot2::element_blank(),
+                             axis.line       = ggplot2::element_blank(),
+                             axis.text.x     = ggplot2::element_blank(),
+                             axis.ticks      = ggplot2::element_blank(),
+                             legend.position = "none",
+                             panel.spacing   = ggplot2::unit(0, "lines"),
+                             plot.margin     = ggplot2::margin(0, 0, 0, 0)),
+                       ggplot2::scale_x_continuous(expand = c(0, 0)),
+                       ggplot2::scale_y_continuous(expand = c(0, 0)))
+    font <- "helvetica_regular"
+    if (type == "energy") {
+      plot <- ggseqlogo::ggseqlogo(pwm, method = "c", font = font, col_scheme = col_scheme) +
+        list(ggplot2::labs(x = NULL, y = NULL),
+             ggplot2::annotate("rect", xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = 0,
+                               alpha = 0.5, fill = "white"),
+             ggplot2::scale_y_continuous(breaks = scales::pretty_breaks()),
+             ggplot2::geom_hline(yintercept = 0), alltheme)
 
-  if (type == "prob") {
-    plot <- ggseqlogo(pwm, method = "c", font = font, col_scheme = col_scheme) +
-      list(labs(x = NULL, y = NULL),
-           scale_y_continuous(breaks = c(0.0, 0.5, 1.0), limits = c(0.0, 1.0)),
-           alltheme)
-
-    if (labels) {
-      plot <- plot + ylab("Probability")
+      if (labels) {
+        plot <- plot + ggplot2::ylab(expression(paste(Delta, Delta, "G/RT")))
+      }
     }
-  }
 
-  suppressMessages(
-    if (!axes) {
-      plot <- plot + no_axes
-    }
-    else {
-      plot <- plot + scale_x_continuous(expand = c(0.01, 0),
-                                        breaks = 1:dim(pwm)[2])
-    }
-  )
+    if (type == "info") {
+      plot <- ggseqlogo::ggseqlogo(pwm, method = "b", font = font, col_scheme = col_scheme) +
+        list(ggplot2::labs(x = NULL, y = NULL),
+             ggplot2::scale_y_continuous(breaks = scales::pretty_breaks()), alltheme)
 
-  return(plot)
+      if (labels) {
+        plot <- plot + ggplot2::ylab("Bits")
+      }
+    }
+
+    if (type == "prob") {
+      plot <- ggseqlogo::ggseqlogo(pwm, method = "c", font = font, col_scheme = col_scheme) +
+        list(ggplot2::labs(x = NULL, y = NULL),
+             ggplot2::scale_y_continuous(breaks = c(0.0, 0.5, 1.0), limits = c(0.0, 1.0)),
+             alltheme)
+
+      if (labels) {
+        plot <- plot + ggplot2::ylab("Probability")
+      }
+    }
+
+    suppressMessages(
+      if (!axes) {
+        plot <- plot + no_axes
+      }
+      else {
+        plot <- plot + ggplot2::scale_x_continuous(expand = c(0.01, 0),
+                                                   breaks = 1:dim(pwm)[2])
+      }
+    )
+    return(plot)
+  })
+
+}
+
+#' Matrix reverse
+#'
+#' Get the binding matrix of the reverse of a binding
+#' @param matrix Binding matrix in either energy, frequency, or information bit.
+#' @param type One of 'energy', 'info', prob'
+#' @param axes To show axes or not
+#' @param motifPos To show reverse strand or not
+#' @param labels To show labels or not
+#' @return A binding motif logo
+#' @export
+matrixReverse <- function(matrix){
+  baseOrder <- rownames(matrix)
+  posOrder <- colnames(matrix)
+  matrix <- matrix[rev(rownames(matrix)), rev(colnames(matrix))]
+  rownames(matrix) <- baseOrder
+  colnames(matrix) <- posOrder
+  return(matrix)
 }
 
 #get sequence for mesh plotting in tetrahedron
@@ -1633,13 +1738,32 @@ AAmutChi <- function(List1, List2, AAfrom1, AAfrom2, AAto1, AAto2, table = F){
   return(max(c(chifrom, chito)))
 }
 
+#' Tetrahedron transformation matrix
+#'
+#' Get the tetrahedron transformation matrix
+#' @export
+tetra_trans_matrix <- function(){
+  return(matrix(data = c(1,1,1,1,-1,-1,-1,1,-1,-1,-1,1), nrow = 4, ncol = 3, byrow = TRUE))
+}
 
-#form dddG table from alignment and ddG data
-form.dddGList <- function(bHLH_pbAlignment, bHLH_motifs, keyPos = c(13,14,5,26,8), leaveOut = c()){
+
+#' Form dddG list
+#'
+#' Create dddG matrix of selected key positions
+#' @param Alignment Data frame of Alignment from concatAli
+#' @param mono_motifs List of motifs output from loadMono_motifs()
+#' @param keyPos Key positions along the alignment to screen
+#' @param posMotif Position in the matrix to screen
+#' @param leaveOut Samples from the alignment to be left out
+#' @return A list containing dddG matrices of key positions
+#' @export
+form.dddGList <- function(Alignment, mono_motifs, keyPos = c(13,14,5,26,8), posMotif = 'P1', leaveOut = c()){
+  bHLH_pbAlignment <- Alignment
+  bHLH_motifs <- mono_motifs
   bHLH_pbAlignment_backup <- bHLH_pbAlignment
   #start here
   bHLH_pbAlignment <- bHLH_pbAlignment_backup
-
+  ittm <- MASS::ginv(tetra_trans_matrix())
   if(length(leaveOut) > 0){
     for(i in 1:length(leaveOut)){
       bHLH_pbAlignment <- bHLH_pbAlignment[-grep(leaveOut[i], bHLH_pbAlignment$name),]
@@ -1671,27 +1795,17 @@ form.dddGList <- function(bHLH_pbAlignment, bHLH_motifs, keyPos = c(13,14,5,26,8
     }
   }
 
-  #create AAtypesList
-  AAtypes <- data.frame(placeHolder = c(1:nrow(bHLH_pbAlignment)))
-  for(i in 1:length(keyPos)){
-    AApos <- keyPos[i]
-    addPos <- substr(bHLH_pbAlignment$alignment,AApos,AApos)
-    AAtypes <- cbind.data.frame(AAtypes, addPos)
-  }
-  AAtypes <- AAtypes[,-1]
-  colnames(AAtypes) <- paste0('AA', keyPos)
-
   #create dddG
   dddGList <- list()
   for(p in 1:length(keyPos)){
     AApos <- keyPos[p]
-    for(posMotif in c('P1', 'P-1')){
+    for(p in posMotif){
       ProteinPos <- data.frame(name = bHLH_pbAlignment$name, pos = substr(bHLH_pbAlignment$alignment,AApos,AApos))
       PosAA <- c()
       for(i in 1:length(bHLH_motifs)){
         PosAA <- c(PosAA, ProteinPos[ProteinPos$name == bHLH_motifs[[i]]$name, 2])
       }
-      pos_matrix <- gene2pos(bHLH_motifs, pos = posMotif, nrow = 4)
+      pos_matrix <- gene2pos(bHLH_motifs, pos = p, nrow = 4)
       colnames(pos_matrix) <- PosAA
       AAs <- unique(colnames(pos_matrix))
       dddGdf <- data.frame(placeHolder = c(0,0,0,0))
@@ -1724,14 +1838,25 @@ form.dddGList <- function(bHLH_pbAlignment, bHLH_motifs, keyPos = c(13,14,5,26,8
       dddGList[[dfName]] <- dddGdf
     }
   }
-  out<- list()
-  out$dddGList <- dddGList
-  out$AAtypes <- AAtypes
+
+  out<- dddGList
+  class(out) <- 'dddGList'
+
   return(out)
 }
 
-#predict energy given sequence and reference energy matrix and dddGList
-predict.ddG <- function(referenceMatrix, referenceSequence, targetSequence, dddGList, posMotif = 'P-1', keyPos = c(13,14,5,8), includeChisquare = T){
+#' Predict dddGList
+#'
+#' Predict energy given sequence and reference energy matrix and dddGList
+#' @param dddGList dddGList model output from form.dddGList()
+#' @param referenceMatrix Binding matrix of the reference sample in ddG measurements
+#' @param referenceSequence Protein sequence along the alignment of the reference sample
+#' @param targetSequence Protien sequence along the alignmetn of the mutant sample
+#' @param keyPos Key positions along the alignment to screen, must be included the dddGList
+#' @param posMotif Position in the matrix to screen, must be included in the dddGList
+#' @return Binding matrix of the mutant sample at the selected matrix position
+#' @export
+predict.dddGList <- function(dddGList, referenceMatrix, referenceSequence, targetSequence,  keyPos = c(13,14,5,8),posMotif = 'P-1'){
   AAfrom <- c()
   AAto <- c()
   for(AApos in keyPos){
@@ -1741,7 +1866,7 @@ predict.ddG <- function(referenceMatrix, referenceSequence, targetSequence, dddG
   mutDt <- data.frame(keyPos, AAfrom, AAto)
 
   deleRows <- c()
-  for(i in nrow(mutDt)){
+  for(i in 1:nrow(mutDt)){
     if(mutDt$AAfrom[i] == mutDt$AAto[i]){
       deleRows <- c(deleRows, i)
     }
@@ -1758,23 +1883,51 @@ predict.ddG <- function(referenceMatrix, referenceSequence, targetSequence, dddG
   for(i in 1:nrow(mutDt)){
 
     modifier <- 1
-    if(i > 1 && includeChisquare){
-      for(j in 1:(i-1)){
-        newmod <- AAmutChi(List1 = unlist(dddGList$AAtypes[i]), List2 = unlist(dddGList$AAtypes[j]),
-                           AAfrom1 = mutDt$AAfrom[i], AAfrom2 = mutDt$AAfrom[j], AAto1 = mutDt$AAto[i], AAto2 = mutDt$AAto[j])
-        if(newmod < modifier){
-          modifier <- newmod
-        }
-      }
-    }
-    if(length(grep(paste0(mutDt$AAfrom[i], '>', mutDt$AAto[i]), colnames(dddGList$dddGList[[paste0('AA', mutDt$keyPos[i], '+', posMotif)]]))) != 0){
-      print(modifier)
-      PredMatrix <- PredMatrix + modifier * data.frame(dddGList$dddGList[[paste0('AA', mutDt$keyPos[i], '+', posMotif)]][,paste0(mutDt$AAfrom[i], '>', mutDt$AAto[i])])
+    if(length(grep(paste0(mutDt$AAfrom[i], '>', mutDt$AAto[i]), colnames(dddGList[[paste0('AA', mutDt$keyPos[i], '+', posMotif)]]))) != 0){
+      PredMatrix <- PredMatrix + modifier * data.frame(dddGList[[paste0('AA', mutDt$keyPos[i], '+', posMotif)]][,paste0(mutDt$AAfrom[i], '>', mutDt$AAto[i])])
     }
   }
-  outMatrix <- data.frame(apply(PredMatrix, 2, function(column) column - mean(column)))
+  outMatrix <- data.frame(apply(as.data.frame(PredMatrix), 2, function(column) column - mean(column)))
   return(outMatrix)
 }
+
+#' Get matrix
+#'
+#' Get matrix according to name from a list of motifs
+#' @param motifs List of motifs, result of loadMono_motifs()
+#' @param name Name of sample to retrieve
+#' @param exactMatch If ture, the name has to be exactly matching the name in the motifs list;
+#' if false, grep is used to search.
+#' @return Motif Matrices with samples with the given name
+#' @export
+getMatrix <- function(motifs, name, exactMatch = T){
+  if(exactMatch){
+    return(motifs[[which(unlist(lapply(motifs, function(x) x$name == name)))]])
+  }else{
+    return(motifs[which(unlist(lapply(motifs, function(x) length(grep(name, x$name))  > 0 )))])
+  }
+}
+
+#' Frequency matrix to ddG matrix
+#'
+#' Change motif matrix in frequency measurements to ddG measurements
+#' @param matrix Motif matrix to be changed
+#' @return Motif matrix in ddG measurements
+#' @export
+frequency2ddG <- function(matrix){
+  return(apply(matrix, 2, function(x) log(x) - mean(log(x))))
+}
+
+#' ddG matrix to Frequency matrix
+#'
+#' Change motif matrix in ddG measurements to frequency measurements
+#' @param matrix Motif matrix to be changed
+#' @return Motif matrix in frequency measurements
+#' @export
+ddG2frequency <- function(matrix){
+  return(apply(matrix, 2, function(x) exp(x - max(x))))
+}
+
 
 #ddG matrix of single AA
 form.ddGFeatureList <- function(bHLH_pbAlignment, bHLH_motifs, keyPos = c(13,14,5,26,8), leaveOut = c()){
@@ -1866,6 +2019,7 @@ form.ddGFeatureList <- function(bHLH_pbAlignment, bHLH_motifs, keyPos = c(13,14,
   return(out)
 }
 
+#unused
 predEigen <- function(targetSequence, ddGFeature, keyPos = c(13,14,5,26,8), motifPos = 'P-1', print.dist = F, distType = 'Euclidean', singularity = 'one'){
   predKeyAA <- c()
   for(i in keyPos){
@@ -1934,13 +2088,85 @@ predEigen <- function(targetSequence, ddGFeature, keyPos = c(13,14,5,26,8), moti
   return(PredM)
 }
 
+#' Weighted mean
+#'
+#' Compute weighted mean of a vector of numbers according to a vector of weight
+#' @param vector A vector of numbers
+#' @param weight weight of each number, should have the same length as vector
+#' @return Weighted mean
+#' @export
 weightedMean <- function(vector, weight){
   w <- weight/sum(weight)
   return(sum(vector*w))
 }
 
+#' Root Mean Squared Difference
+#'
+#' Compute the RMSD between two vectors
+#' @param a Vector 1
+#' @param b Vector 2
+#' @return RMSD of the 2 vectors
+#' @export
 RMSD <- function(a,b){
   return(mean((a-b)^2)^(1/2))
+}
+
+#' Amino Acid features
+#'
+#' Get Hydropathy, Volume, and Isoelectric Point features for Amino Acids
+#' @return AA feature data frame
+#' @export
+AAfeatures <- function(){
+  AA <- c('A','C','D','E','F','G','H','I','K','L','M','N','P','Q','R','S','T','V','W','Y','-')
+  Hydropathy <- c(1.8, 2.5, -3.5, -3.5, 2.8, -0.4, -3.2, 4.5, -3.9, 3.8, 1.9, -3.5, -1.6, -3.5, -4.5, -0.8, -0.7, 4.2, -0.9, -1.3, 0)
+  Volume <- c(88.6, 108.5,111.1, 138.4, 189.9, 60.1, 153.2, 166.7, 168.6, 166.7, 162.9, 114.1, 112.7, 143.8,
+              173.4, 89.0, 116.1, 140.0, 227.8, 193.9, 141.275)
+  PI <- c(6.11, 5.15, 2.98, 3.08, 5.76, 6.06, 7.64, 6.04, 9.47, 6.04, 5.71, 5.43, 6.30, 5.65, 10.76, 5.70,
+          5.60, 6.02, 5.88, 5.63, 6.0505)
+
+  AAfeature <- data.frame(Hydropathy, Volume, PI)
+  return(AAfeature)
+}
+
+#' Matrix Singular Value Decomposition
+#'
+#' Compute the tetrahedron SVD matrices of a position specific motif matrix of multiple samples
+#' @param posMatrix Matrix of binding motifs at a specific motif position, result of gene2pos()
+#' @return u matrix, v matrix, d vector from SVD, and the mean of each column of the transformed
+#' tetrahedron coordinate matrix
+#' @export
+matrixSVD <- function(posMatrix){
+  tetra_matrix <- matrix2tetrahedron(posMatrix)
+  tetra_means <- apply(tetra_matrix, 2,function(x) mean(x))
+  tetra_matrix <- apply(tetra_matrix, 2,function(x) x-mean(x))
+  svd <- svd(tetra_matrix)
+  svd$tetra_mean <- tetra_means
+  return(svd)
+}
+
+#' SVD ANOVA on residue types
+#'
+#' Perform ANOVA test between the u-matrix and the residue types along the alignment
+#' @param svd Result from matrixSVD()
+#' @param Alignment Alignment table with name and aligned sequences in the same order as the matrixSVD input
+#' @return A matrix of p-values with nrow = number of principal components in SVD, ncol = number of positions in the alignment
+#' @export
+svdANOVA <- function(svd, Alignment){
+  svd.aov <- matrix(nrow = ncol(svd$v), ncol = nchar(Alignment$alignment[1]), data = 0)
+  for(i in 1:ncol(svd$v)){
+    for(j in 1:nchar(Alignment$alignment[1])){
+      u1 <- svd$u[,i]
+      aa <- substr(Alignment$alignment,j,j)
+      dt <- cbind.data.frame(aa,u1)
+      if(length(unique(aa)) == 1){
+        next()
+      }
+      aov <- aov(u1~aa,dt)
+      svd.aov[i,j] <- summary(aov)[[1]][[5]][1]
+
+    }
+  }
+  return(svd.aov)
 }
 
 
