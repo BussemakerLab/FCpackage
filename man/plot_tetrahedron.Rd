@@ -5,7 +5,7 @@
 \title{Plot tetrahedron}
 \usage{
 plot_tetrahedron(
-  JSON_matrix,
+  posMatrix,
   base_colors = c("green", "blue", "orange", "red"),
   size = 5,
   axis = FALSE,
@@ -14,7 +14,7 @@ plot_tetrahedron(
 )
 }
 \arguments{
-\item{JSON_matrix}{Matrix of binding motifs at a specific motif position, result of gene2pos()}
+\item{posMatrix}{Matrix of binding motifs at a specific motif position, result of gene2pos()}
 
 \item{base_colors}{Color of bases at the vertexes}
 

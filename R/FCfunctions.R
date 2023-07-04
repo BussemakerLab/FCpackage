@@ -850,7 +850,6 @@ concatAli <- function(Ali, start = 1, length = nchar(Ali[1,2])){
 #' @param withTable If true, output with bHLH_index table with scoring and model number; if false, only output
 #' @param useMode List of binding modes to use, if left empty, the highest scored mode according to rec_seq
 #' will be used.
-#' list mono_motifs.
 #' @return List of motifs in mono_motifs, also an info table if withTable == T
 #' @export
 loadMono_motifs <- function(bHLH_index,
@@ -933,11 +932,12 @@ loadMono_motifs <- function(bHLH_index,
 #'
 #' Get the base-line accuracy for motif scoring according to different experiments performed on the same sample protein
 #' @param mono_motifs List of motifs that are input as frequency values (0-1 with highest of 1)
-#' @param posMotif Position in motif to extract
+#' @param pos Position in motif to extract
 #' @param randomSample If true, randomly select from studies of the sample protein; if fasle, takes the first two studies
 #' @return Data frame with two columns with pair-wise ddG values that can be plotted
 #' @export
-getBaseLineAccuracy <- function(mono_motifs, posMotif, randomSample = FALSE){
+getBaseLineAccuracy <- function(mono_motifs, pos, randomSample = FALSE){
+  posMotif <- pos
   func <- function(str){return(strsplit(str$name, '_')[[1]][1])}
   geneList <- unlist(lapply(mono_motifs, func))
   geneNames <- unique(geneList)
@@ -2125,6 +2125,7 @@ AAfeatures <- function(){
           5.60, 6.02, 5.88, 5.63, 6.0505)
 
   AAfeature <- data.frame(Hydropathy, Volume, PI)
+  rownames(AAfeature) <- AA
   return(AAfeature)
 }
 
@@ -2149,7 +2150,7 @@ matrixSVD <- function(posMatrix){
 #' Perform ANOVA test between the u-matrix and the residue types along the alignment
 #' @param svd Result from matrixSVD()
 #' @param Alignment Alignment table with name and aligned sequences in the same order as the matrixSVD input
-#' @return A matrix of p-values with nrow = number of principal components in SVD, ncol = number of positions in the alignment
+#' @return A data frame of -log10 p-values with cols = number of principal components in SVD, rows = number of positions in the alignment
 #' @export
 svdANOVA <- function(svd, Alignment){
   svd.aov <- matrix(nrow = ncol(svd$v), ncol = nchar(Alignment$alignment[1]), data = 0)
@@ -2166,10 +2167,285 @@ svdANOVA <- function(svd, Alignment){
 
     }
   }
-  return(svd.aov)
+  svd.aov <- -log(svd.aov,10)
+  svd.aov[svd.aov == Inf] <- 0
+  svd.pvalTable <- data.frame(t(svd.aov))
+  svd.pvalTable$name <- c(1:nchar(Alignment$alignment[1]))
+  return(svd.pvalTable)
 }
 
+#' Train SVD-regression model
+#'
+#' Train a SVD-regression model with matrixSVD and matched Alignment
+#' @param svd Result from matrixSVD()
+#' @param Alignment Alignment table with name and aligned sequences in the same order as the matrixSVD input
+#' @param no.keyPos Number of key positions to use for each PC, length of this vector should be the same as
+#' the length of the svd$d vector
+#' @param keyPos A list of key positions to use for prediction, using this argument stops key position identification.
+#' no.keyPos should still be entered for the number of keyPos used for each PC. If using 0 keyPos for a PC,
+#' enter a valid keypos number and put 0 in the no.keyPos vector for this PC.
+#' @return SVD-regression model
+#' @export
+trainSVD <- function(svd, Alignment, no.keyPos = c(4,3,2), keyPos = c()){
+  if(length(svd$d) != length(no.keyPos)){
+    print('no.keyPos has different length from svd, please fill unused PCs with 0')
+    return()
+  }
+  skip <- which(no.keyPos == 0)
+  alignment <- Alignment
+  if(length(keyPos) == 0){
+    svd.pvalTable <- svdANOVA(svd, alignment)
+    keyPos <- list()
+    for(i in 1:length(no.keyPos)){
+      X1feature <- dplyr::arrange(svd.pvalTable, desc(svd.pvalTable[,i]))[1:no.keyPos[i], 'name']
+      sele <- rep(X1feature[1], max(no.keyPos))
+      sele[1:no.keyPos[i]] <- X1feature
+      keyPos[[i]] <- sele
+    }
+  }else{
+    for(kp in 1:length(keyPos)){
+      if(length(keyPos[[kp]]) < max(unlist(lapply(keyPos, function(x) length(x))))){
+        keyPos[[kp]][(length(keyPos[[kp]])+1):max(unlist(lapply(keyPos, function(x) length(x))))] <- keyPos[[kp]][1]
+      }
+    }
+  }
 
+
+
+  #average list
+  uList <- list()
+  for(i in 1:length(no.keyPos)){
+    rowList <- list()
+    for(j in keyPos[[i]]){
+      u1 <- svd$u[,i]
+      aa <- substr(alignment$alignment,j,j)
+      dt <- cbind.data.frame(aa,u1)
+      aas <- unique(dt$aa)
+      means <- c()
+      for(a in aas){
+        subDt <- dt[dt$aa == a,]
+        means <- c(means, mean(subDt$u1))
+      }
+      meanDt <- data.frame(aa = aas, mean = means)
+      rowList[[j]] <- meanDt
+    }
+    uList[[i]] <- rowList
+  }
+
+  #synthetic U matrix
+  synUList <- list()
+  for(ali in 1:nrow(alignment)){
+    synU <- list()
+    for(i in 1:length(no.keyPos)){
+      addList <- c()
+      for(j in keyPos[[i]]){
+        aa <- substr(alignment$alignment[ali],j,j)
+        uset <- uList[[i]][[j]]
+        add <- uset[uset$aa == aa, 2]
+        addList <- c(addList, add)
+      }
+      synU[[i]] <- addList
+    }
+    synUList[[ali]] <- synU
+  }
+
+  #get linear regression coefficients
+  synUpred <- list()
+  coefList <- list()
+  for(uindex in 1:length(no.keyPos)){
+    synthesizedU <- matrix(nrow = nrow(alignment), ncol = length(keyPos[[1]]))
+    for(i in 1:nrow(alignment)){
+      synthesizedU[i,] <- synUList[[i]][[uindex]]
+    }
+    synthesizedU <- data.frame(synthesizedU)
+    synthesizedU$label <- svd$u[,uindex]
+    lm <- lm(label~., synthesizedU)
+
+    coef <- lm$coefficients
+    coef[is.na(coef)] <- 0
+    if(length(which(uindex == skip)) > 0){
+      coef <- rep(0, length(coef))
+    }
+    coefList[[uindex]] <- coef
+
+    newU <- c()
+    for(i in 1:nrow(alignment)){
+      add <- sum(synthesizedU[i,1:length(keyPos[[uindex]])]*coef[1:length(keyPos[[uindex]])+1]) + coef[1]
+      newU <- c(newU,add)
+    }
+    synUpred[[uindex]] <- newU
+  }
+
+
+  Upred <- matrix(nrow = nrow(alignment), ncol = length(no.keyPos))
+  for(i in 1:length(no.keyPos)){
+    Upred[,i] <- synUpred[[i]]
+  }
+
+  reSvd <- Upred %*% diag(svd$d) %*% t(svd$v)
+  true <- svd$u %*% diag(svd$d) %*% t(svd$v)
+  trainingRMSD <- RMSD(reSvd, true)
+  if(length(skip) != 0){
+    keyPos[[skip]] <- rep(0, length(keyPos[[skip]]))
+  }
+  out <- list()
+  out$model <- coefList
+  out$svd <- svd
+  out$keyPos <- keyPos
+  out$trainRMSD <- trainingRMSD
+  out$trainPred <- reSvd
+  out$uList <- uList
+  class(out) <- 'SVD'
+  return(out)
+}
+
+#' Predict with SVD-regression model
+#'
+#' Predict binding matrix with SVD-regression model
+#' @param svdModel SVD-regression model result from trainSVD()
+#' @param Alignment Alignment table with name and aligned sequences to be predicted
+#' @param zero Lower limit to be assigned to predicted values
+#' @return Matrix of binding motif models in feaquency measurements.
+#' @export
+predict.SVD <- function(svdModel, Alignment, zero = 0.001){
+  if(length(svdModel$keyPos) != 3){
+    print('Cannot perform tetrahedron transformation, number of PCs should be 3')
+    return()
+  }
+  predList <- c()
+  for(ali in 1:nrow(Alignment)){
+    synUtest <- list()
+    for(i in 1:length(svdModel$keyPos)){
+      addList <- c()
+      for(j in svdModel$keyPos[[i]]){
+        aa <- substr(Alignment$alignment[ali],j,j)
+        uset <- svdModel$uList[[i]][[j]]
+        add <- uset[uset$aa == aa, 2]
+        if(length(add) == 0){
+          addList <- c(addList, 0)
+        }else{
+          addList <- c(addList, add)
+        }
+      }
+      synUtest[[i]] <- addList
+    }
+
+    predTest <- c()
+    for(i in 1:length(svdModel$keyPos)){
+      predTest <- c(predTest, sum(coefList[[i]][1:length(svdModel$keyPos[[i]])+1] * synUtest[[i]]) + coefList[[i]][1])
+    }
+    pred <- predTest %*% diag(svdModel$svd$d) %*% t(svdModel$svd$v)
+    predList <- c(predList, pred)
+  }
+  tetra_trans_matrix <- matrix(data = c(1,1,1,1,-1,-1,-1,1,-1,-1,-1,1), nrow = 4, ncol = 3, byrow = TRUE)
+  pssm_trans_matrix <- MASS::ginv(tetra_trans_matrix)
+
+  mean_matrix <- matrix(nrow = length(predList)/3, ncol = 3, data = svdModel$svd$tetra_mean, byrow = T)
+  predMatrix <- matrix(nrow = length(predList)/3, ncol = 3, data = predList, byrow = T)
+  predMatrix1 <- apply(t((predMatrix+mean_matrix)%*%pssm_trans_matrix + 0.25), 2, function(x) x/max(x))
+
+  predMatrix1[predMatrix1 < zero] <- zero
+  colnames(predMatrix1) <- Alignment$name
+  rownames(predMatrix1) <- c('A','C','G','T')
+  return(predMatrix1)
+}
+
+#' Grouped R-square
+#'
+#' Find average R-square value for two vectors separated in to groups with multiple members
+#' @param x Vector 1
+#' @param y Vector 2
+#' @param member number of member of each group
+#' @return Average R-square value
+#' @export
+groupedR2 <- function(x,y,member = 4){
+  group <- member
+  if(length(x)!=length(y)){
+    print('x and y have different length')
+    return()
+  }
+  if(length(x)%%group != 0){
+    print('Cannot be devided evenly by group number')
+    return()
+  }
+  xM <- matrix(nrow = length(x)/group, ncol = group, data = x, byrow = T)
+  yM <- matrix(nrow = length(y)/group, ncol = group, data = y, byrow = T)
+  R2s <- c()
+  for(i in 1:nrow(xM)){
+    dt <- data.frame(xx = xM[i,], yy = yM[i,])
+    lm <- lm(yy~xx+0, dt)
+    R2s <- c(R2s, suppressWarnings(summary(lm)$r.squared))
+  }
+  return(mean(R2s))
+}
+
+#' Closest sequence prediction
+#'
+#' Use the Closest sequence prediction method (Weirauch, 2014) to predict the binding matrix
+#' @param mono_motifs List of motifs that are input as frequency values (0-1 with highest of 1)
+#' @param Alignment The alignment resulted from concatAli
+#' @param pos Binding matrix position to extract
+#' @return Data frame with two columns containing the true and predicted values
+#' @export
+closestSeqPred <- function(mono_motifs, Alignment, pos = 'P-1'){
+  pos_matrix <- gene2pos(mono_motifs, pos = pos)
+  alignment <- Alignment
+  trueList <- c()
+  predList <- c()
+  for(i in 1:ncol(pos_matrix)){
+    seq <- alignment$alignment[i]
+    maxStr <- Inf
+    predIndex <- 0
+    for(j in 1:ncol(pos_matrix)){
+      if(j != i){
+        Str <- stringdist::stringdist(seq, alignment$alignment[j])
+        if(Str < maxStr){
+          maxStr <- Str
+          predIndex <- j
+        }
+      }
+    }
+    trueList <- c(trueList, unlist(data.frame(apply(log(as.data.frame(pos_matrix[,i])), 2, function(column) column - mean(column)))))
+    predList <- c(predList, unlist(data.frame(apply(log(as.data.frame(pos_matrix[,predIndex])), 2, function(column) column - mean(column)))))
+  }
+  out <- data.frame(true = trueList, pred = predList)
+  return(out)
+}
+
+#' Amino acid mapping against principal components
+#'
+#' Perform linear regression between the PC value of amino acid type at a given alignment position and
+#' motif position and the selected amino acid property
+#' @param mono_motifs List of motifs that are input as frequency values (0-1 with highest of 1)
+#' @param Alignment The alignment resulted from concatAli
+#' @param pos Binding matrix position to extract
+#' @param AApos Residue position along the alignment
+#' @param PC Principal componant to screen
+#' @param property Biophysical property to screen. 1 = Hydropathy, 2 = Volume, 3 = Isoelectric Point
+#' @return Plot PC value against amino acid prooperty, returns summary of linear regression
+#' @export
+aaPCmap <- function(mono_motifs, Alignment, pos = 'P-1', AApos = 13, PC = 1, property = 1){
+  svd <- matrixSVD(gene2pos(mono_motifs, pos))
+  i <- PC
+  j <- AApos
+  u1 <- svd$u[,i]
+  p <- property
+  aa <- substr(Alignment$alignment,j,j)
+  AAf <- AAfeatures()
+  AAf$AA <- rownames(AAf)
+  dt <- cbind.data.frame(AA = aa,u1)
+  dt <- merge(dt, AAf, by = 'AA')
+  f <- as.formula(paste0('u1~', colnames(dt)[p+2]))
+  plot(dt[,p+2], dt$u1, pch = 19, xlab = properties[p], ylab = PCs[i], main = paste0('AA Position ', j))
+  lm <- lm(f, dt)
+  if(is.na(lm[1]$coefficients[2])){
+    return()
+  }
+  abline(lm, lwd = 2, col = 'red')
+  return(summary(lm))
+}
+
+#deprecated
 pred.SVD.ridge <- function(alignment, tetra_matrix, testSeq = '-KSLRPLLEKRRRARINQSLSQLKGLI-L------PLLGRENS--NCSKLEKADVL', keyPos = c(1:55)){
   tetra_means <- apply(tetra_matrix, 2,function(x) mean(x))
   tetra_matrix <- apply(tetra_matrix, 2,function(x) x-mean(x))

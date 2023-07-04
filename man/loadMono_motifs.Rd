@@ -10,7 +10,8 @@ loadMono_motifs(
   rec_seq = "CANNTG",
   pos_index = c("P-3", "P-2", "P-1", "P1", "P2", "P3"),
   checkSymmetry = FALSE,
-  withTable = TRUE
+  withTable = TRUE,
+  useMode = c()
 )
 }
 \arguments{
@@ -27,8 +28,10 @@ the $gene_symbol_$study identifier to $modelFile$.}
 
 \item{checkSymmetry}{To check symmetry like bHLH protein, should be changed for families other than bHLH}
 
-\item{withTable}{If true, output with bHLH_index table with scoring and model number; if false, only output
-list mono_motifs.}
+\item{withTable}{If true, output with bHLH_index table with scoring and model number; if false, only output}
+
+\item{useMode}{List of binding modes to use, if left empty, the highest scored mode according to rec_seq
+will be used.}
 }
 \value{
 List of motifs in mono_motifs, also an info table if withTable == T

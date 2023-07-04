@@ -7,7 +7,7 @@
 AAbpCombination(mono_motifs, Alignment, AApos, motifPos)
 }
 \arguments{
-\item{mono_motifs}{List of motifs output from loadMono_motifs}
+\item{mono_motifs}{List of motifs output from loadMono_motifs()}
 
 \item{Alignment}{Data frame of Alignment from concatAli}
 

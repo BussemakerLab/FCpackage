@@ -5,7 +5,7 @@
 \title{Plot 4-way tetrahedron}
 \usage{
 plot_4Graph(
-  JSON_matrix,
+  posMatrix,
   base_colors = c("green", "blue", "orange", "red"),
   size = 5,
   label = F,
@@ -13,7 +13,7 @@ plot_4Graph(
 )
 }
 \arguments{
-\item{JSON_matrix}{Matrix of binding motifs at a specific motif position, result of gene2pos()}
+\item{posMatrix}{Matrix of binding motifs at a specific motif position, result of gene2pos()}
 
 \item{base_colors}{Color of bases at the vertexes}
 

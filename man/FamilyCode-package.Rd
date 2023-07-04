@@ -4,7 +4,7 @@
 \name{FamilyCode-package}
 \alias{FamilyCode}
 \alias{FamilyCode-package}
-\title{FamilyCode: What the Package Does (Title Case)}
+\title{FamilyCode: R Package For Family Code Framework}
 \description{
 More about what it does (maybe more than one line) Use four spaces when indenting paragraphs within the Description.
 }

@@ -4,12 +4,12 @@
 \alias{getBaseLineAccuracy}
 \title{Get base-line Accuracy}
 \usage{
-getBaseLineAccuracy(mono_motifs, posMotif, randomSample = FALSE)
+getBaseLineAccuracy(mono_motifs, pos, randomSample = FALSE)
 }
 \arguments{
 \item{mono_motifs}{List of motifs that are input as frequency values (0-1 with highest of 1)}
 
-\item{posMotif}{Position in motif to extract}
+\item{pos}{Position in motif to extract}
 
 \item{randomSample}{If true, randomly select from studies of the sample protein; if fasle, takes the first two studies}
 }
