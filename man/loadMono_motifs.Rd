@@ -5,7 +5,7 @@
 \title{Load mono_motifs}
 \usage{
 loadMono_motifs(
-  bHLH_index,
+  index,
   modelFile_Template = "~/$modelFile$/result/fit.models.consensus.json",
   rec_seq = "CANNTG",
   pos_index = c("P-3", "P-2", "P-1", "P1", "P2", "P3"),
@@ -15,7 +15,7 @@ loadMono_motifs(
 )
 }
 \arguments{
-\item{bHLH_index}{data frame containing the identifiers of each experiment,
+\item{index}{data frame containing the identifiers of each experiment,
 contains protein name as $gene_symbol and study name as $study in the first two column,
 ProBound running folders should be name as $gene_symbol_$study.}
 

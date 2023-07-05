@@ -163,7 +163,7 @@ concatAli <- function(Ali, start = 1, length = nchar(Ali[1,2])){
 #'
 #' Load binding motifs from dir containing ProBound results, the model with the highest
 #' consensus sequence recognition score will be added to the resulting list
-#' @param bHLH_index data frame containing the identifiers of each experiment,
+#' @param index data frame containing the identifiers of each experiment,
 #' contains protein name as $gene_symbol and study name as $study in the first two column,
 #' ProBound running folders should be name as $gene_symbol_$study.
 #' @param modelFile_Template Path to a sample fit.models.consensus.json and switching
@@ -176,13 +176,14 @@ concatAli <- function(Ali, start = 1, length = nchar(Ali[1,2])){
 #' will be used.
 #' @return List of motifs in mono_motifs, also an info table if withTable == T
 #' @export
-loadMono_motifs <- function(bHLH_index,
+loadMono_motifs <- function(index,
                             modelFile_Template = '~/$modelFile$/result/fit.models.consensus.json',
                             rec_seq = 'CANNTG',
                             pos_index = c('P-3','P-2','P-1','P1','P2','P3'),
                             checkSymmetry = FALSE,
                             withTable = TRUE,
                             useMode = c()){
+  bHLH_index <- index
   mono_motifs <- list()
   motif_model <- c()
   symmetry <- c()

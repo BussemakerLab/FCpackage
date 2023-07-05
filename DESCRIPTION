@@ -1,7 +1,7 @@
 Package: FamilyCode
 Type: Package
 Title: R Package For Family Code Framework
-Version: 0.1.1
+Version: 0.1.2
 Author: Shaoxun Liu
 Maintainer: Shaoxun Liu <sl4970@columbia.edu>
 Description: 
