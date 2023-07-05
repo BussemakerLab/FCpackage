@@ -1371,9 +1371,6 @@ trainSVD <- function(svd, Alignment, no.keyPos = c(), keyPos = c()){
   reSvd <- Upred %*% diag(svd$d) %*% t(svd$v)
   true <- svd$u %*% diag(svd$d) %*% t(svd$v)
   trainingRMSD <- RMSD(reSvd, true)
-  if(length(skip) != 0){
-    keyPos[[skip]] <- rep(0, length(keyPos[[skip]]))
-  }
   out <- list()
   out$model <- coefList
   out$svd <- svd
