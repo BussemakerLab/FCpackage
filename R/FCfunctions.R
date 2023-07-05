@@ -1551,7 +1551,7 @@ mononucleotide_logo <- function(matrix, type="energy", axes=TRUE, reverse=FALSE,
                                                        axis.ticks      = ggplot2::element_line(color = "black", size = 1),
                                                        panel.border    = ggplot2::element_blank(), panel.grid = ggplot2::element_blank(),
                                                        legend.position = "none")
-    no_axes    <- list(theme(line            = ggplot2::element_blank(),
+    no_axes    <- list(ggplot2::theme(line            = ggplot2::element_blank(),
                              rect            = ggplot2::element_blank(),
                              text            = ggplot2::element_blank(),
                              axis.line       = ggplot2::element_blank(),
