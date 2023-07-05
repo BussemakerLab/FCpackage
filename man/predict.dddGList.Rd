@@ -5,16 +5,17 @@
 \title{Predict dddGList}
 \usage{
 \method{predict}{dddGList}(
-  dddGList,
+  object,
   referenceMatrix,
   referenceSequence,
   targetSequence,
   keyPos = c(13, 14, 5, 8),
-  posMotif = "P-1"
+  posMotif = "P-1",
+  ...
 )
 }
 \arguments{
-\item{dddGList}{dddGList model output from form.dddGList()}
+\item{object}{dddGList model output from form.dddGList()}
 
 \item{referenceMatrix}{Binding matrix of the reference sample in ddG measurements}
 
@@ -25,6 +26,8 @@
 \item{keyPos}{Key positions along the alignment to screen, must be included the dddGList}
 
 \item{posMotif}{Position in the matrix to screen, must be included in the dddGList}
+
+\item{...}{Place holder for generic function}
 }
 \value{
 Binding matrix of the mutant sample at the selected matrix position

@@ -6,6 +6,6 @@
 \alias{FamilyCode-package}
 \title{FamilyCode: R Package For Family Code Framework}
 \description{
-More about what it does (maybe more than one line) Use four spaces when indenting paragraphs within the Description.
+Sequence-specific protein-DNA interactions of transcription factors (TFs) with the genome underlie many cellular processes. High-throughput in vitro binding assays coupled with computational analysis have made it possible to accurately define such sequence recognition in terms of biophysical binding free energies in a mechanism-agonistic way for individual TFs. The fact that such binding models are available for hundreds of TFs provide new opportunities for family-level analyses that can explain how the DNA binding specificity of a TF changes when its protein sequence is mutated. To this end, we developed an analytical framework that can be applied at the level of a given structural TF family, such as bHLH, for which many binding models are available. It allows us to systematically map dependencies between amino-acid identity at a particular residue position and the energetic preference for DNA features at a particular position within the binding site. Our family code framework can make binding energy predictions of TFs with point mutations and perform whole sequence binding energy prediction on novel TFs with close to experimental accuracies. We also performed SELEX-seq assays on mutated TFs to experimental validate our results.
 }
 \keyword{internal}

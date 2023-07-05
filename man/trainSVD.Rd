@@ -4,15 +4,16 @@
 \alias{trainSVD}
 \title{Train SVD-regression model}
 \usage{
-trainSVD(svd, Alignment, no.keyPos = c(4, 3, 2), keyPos = c())
+trainSVD(svd, Alignment, no.keyPos = c(), keyPos = c())
 }
 \arguments{
 \item{svd}{Result from matrixSVD()}
 
 \item{Alignment}{Alignment table with name and aligned sequences in the same order as the matrixSVD input}
 
-\item{no.keyPos}{Number of key positions to use for each PC, length of this vector should be the same as
-the length of the svd$d vector}
+\item{no.keyPos}{Number of key positions to use for each PC. If not provided,
+the d vector of the svd result, rounded up, will be the number of key positions used for each PC.
+If provided, the length of this vector should be the same as the length of the svd$d vector}
 
 \item{keyPos}{A list of key positions to use for prediction, using this argument stops key position identification.
 no.keyPos should still be entered for the number of keyPos used for each PC. If using 0 keyPos for a PC,

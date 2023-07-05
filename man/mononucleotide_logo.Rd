@@ -19,9 +19,9 @@ mononucleotide_logo(
 
 \item{axes}{To show axes or not}
 
-\item{labels}{To show labels or not}
+\item{reverse}{To show reverse strand or not}
 
-\item{motifPos}{To show reverse strand or not}
+\item{labels}{To show labels or not}
 }
 \value{
 A binding motif logo

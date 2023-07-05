@@ -1,3 +1,0 @@
-"0","BaseLines <- getBaseLineAccuracy(mono_motifs, posMotif = 'P1', randomSample = F)"
-"0",""
-"0","plot(BaseLines$HT1,BaseLines$HT2, pch = 19, xlab = 'Experiment 1 ddG', ylab = 'Experiment 2 ddG', main = 'Pair-wise experiment comparison', col = c('green','blue','orange','red'))"

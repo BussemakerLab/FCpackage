@@ -1,3 +1,0 @@
-"0","proBound_runDIR <- 'E:\\Desktop\\HB_Rotation_1\\ProBound_run\\results_for_publication\\'"
-"0","bHLH_info <- read.csv(file = ""E:/Desktop/HB_Rotation_1/Base_Shape_rec/bHLH_info.csv"", row.names = 1)"
-"0","bHLH_ali <- read.table(""E:/Desktop/HB_Rotation_1/Base_Shape_rec/bHLH_pb.sto.stockholm"", quote=""\"""", fill = T)"

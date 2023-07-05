@@ -7,18 +7,10 @@
 matrixReverse(matrix)
 }
 \arguments{
-\item{matrix}{Binding matrix in either energy, frequency, or information bit.}
-
-\item{type}{One of 'energy', 'info', prob'}
-
-\item{axes}{To show axes or not}
-
-\item{motifPos}{To show reverse strand or not}
-
-\item{labels}{To show labels or not}
+\item{matrix}{Binding matrix in either ddG or frequency.}
 }
 \value{
-A binding motif logo
+The reversed binding motif matrix
 }
 \description{
 Get the binding matrix of the reverse of a binding

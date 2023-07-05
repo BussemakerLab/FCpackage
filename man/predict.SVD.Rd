@@ -4,14 +4,16 @@
 \alias{predict.SVD}
 \title{Predict with SVD-regression model}
 \usage{
-\method{predict}{SVD}(svdModel, Alignment, zero = 0.001)
+\method{predict}{SVD}(object, Alignment, zero = 0.001, ...)
 }
 \arguments{
-\item{svdModel}{SVD-regression model result from trainSVD()}
+\item{object}{SVD-regression model result from trainSVD()}
 
 \item{Alignment}{Alignment table with name and aligned sequences to be predicted}
 
 \item{zero}{Lower limit to be assigned to predicted values}
+
+\item{...}{Place holder for generic function}
 }
 \value{
 Matrix of binding motif models in feaquency measurements.
