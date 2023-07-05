@@ -88,7 +88,6 @@ run.pymol <- function(pymol.dir = 'E:/pymol/pymol_app/pyMOLWin.exe',
   return('Pymol started')
 }
 
-####function: JSON2Matrix (read JSON file of motif energy matrix and output as matrix)####
 #' JSON to Matrix
 #'
 #' Parse JSON file containing binding motifs to a scoring matrix
