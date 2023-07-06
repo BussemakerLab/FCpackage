@@ -323,7 +323,7 @@ getPvalTable <- function(mono_motifs, Alignment, pos_index = c('P-3','P-2','P-1'
     for(n.pos in 1:length(pos_index)){
       pos_matrix <- gene2pos(mono_motifs, pos = pos_index[n.pos])
       df <- matrix2tetrahedron(pos_matrix)
-
+      df[is.na(df)] <- 0
       df <- data.frame(AA = PosAA, A = df[,1], C = df[,2], G = df[,3])
       man.test <- stats::manova(cbind(A,C,G) ~ AA, data = df)
 
@@ -1458,7 +1458,11 @@ groupedR2 <- function(x,y,member = 4){
   for(i in 1:nrow(xM)){
     dt <- data.frame(xx = xM[i,], yy = yM[i,])
     lm <- lm(yy~xx+0, dt)
-    R2s <- c(R2s, suppressWarnings(summary(lm)$r.squared))
+    if(is.na(suppressWarnings(summary(lm)$r.squared))){
+      add <- 0
+    }
+    add <- suppressWarnings(summary(lm)$r.squared)
+    R2s <- c(R2s, )
   }
   return(mean(R2s))
 }
