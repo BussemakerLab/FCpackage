@@ -1462,7 +1462,7 @@ groupedR2 <- function(x,y,member = 4){
       add <- 0
     }
     add <- suppressWarnings(summary(lm)$r.squared)
-    R2s <- c(R2s, )
+    R2s <- c(R2s, add)
   }
   return(mean(R2s))
 }
