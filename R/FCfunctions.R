@@ -174,6 +174,7 @@ concatAli <- function(Alignment, start = 1, length = nchar(Ali[1,2])){
 #' of the same length
 #' @param pos_index Position names of the consensus sequence
 #' @param weight Weight parameters to feed into find_binding_site().
+#' @param threshold Threshold to evaluate recognized motifs.
 #' @param rev If true, also screens the reverse matrix. Usually used for non-symmetrical motifs
 #' @param checkSymmetry To check symmetry like bHLH protein, should be changed for families other than bHLH
 #' @param withTable If true, output with bHLH_index table with scoring and model number; if false, only output
@@ -186,6 +187,7 @@ loadMono_motifs <- function(index,
                             rec_seq = 'CANNTG',
                             pos_index = c('P-3','P-2','P-1','P1','P2','P3'),
                             weight = c(),
+                            threshold = 0,
                             rev = F,
                             checkSymmetry = FALSE,
                             withTable = TRUE,
@@ -217,13 +219,13 @@ loadMono_motifs <- function(index,
           for(rec in 1:length(rec_seq)){
             bestScore <- 0
             rec_seq1 <- rec_seq[rec]
-            bindingSite <- find_binding_site(JSON_matrix, rec_seq1, threshold = 0, weight = weight)
+            bindingSite <- find_binding_site(JSON_matrix, rec_seq1, threshold = threshold, weight = weight)
             bind_pos <- bindingSite$max_pos[1]
             maxScore <- max(bindingSite$scores)
             maxMatrix <- JSON_matrix
             if(rev){
               revMatrix <- matrixReverse(JSON_matrix)
-              revBindingSite <- find_binding_site(revMatrix, rec_seq1, threshold = 0, weight = weight)
+              revBindingSite <- find_binding_site(revMatrix, rec_seq1, threshold = threshold, weight = weight)
               revbind_pos <- revBindingSite$max_pos[1]
               revmaxScore <- max(revBindingSite$scores)
               if(revmaxScore > maxScore){
@@ -444,7 +446,11 @@ matchAliMotif <- function(mono_motifs, Alignment, both = F){
   out <- list()
   out$alignment <- Alignment[geneNames,]
   out$motifs <- mono_motifs
-  return(out)
+  if(!both){
+    return(out$alignment)
+  }else{
+    return(out)
+  }
 }
 
 #' Amino acid residue type-base pair combination
@@ -593,14 +599,14 @@ find_binding_site <- function(JSON_matrix,rec_seq,threshold = 0.5, weight = c())
   #set output data structure
   out <- list(start_pos = c(), high_scores = c(), scores = c(), max_pos = 0)
   #normalize JSON_matrix
-  norm_matrix <- JSON_matrix
+  norm_matrix <- normalize_sum1(JSON_matrix, rows = F)
   len_motif <- ncol(norm_matrix)
   len_rec_seq <- nchar(rec_seq)
   for(i in 1:(len_motif - len_rec_seq + 1)){
     score <- 0
     for(j in 1:len_rec_seq){
       if(substr(rec_seq,j,j) == 'N'){
-        weight[j] <- 0
+        score <- score + threshold*weight[j]
       }else{
         score <- score + norm_matrix[substr(rec_seq,j,j),(i+j-1)]*weight[j]
       }
@@ -611,8 +617,8 @@ find_binding_site <- function(JSON_matrix,rec_seq,threshold = 0.5, weight = c())
       out$high_scores <- c(out$high_scores, score)
     }
     out$scores <- c(out$scores, score)
-    out$max_pos <- out$start_pos[which(out$high_scores == max(out$high_scores))]
   }
+  out$max_pos <- out$start_pos[which(out$high_scores == max(out$high_scores))]
   return(out)
 }
 

@@ -10,6 +10,7 @@ loadMono_motifs(
   rec_seq = "CANNTG",
   pos_index = c("P-3", "P-2", "P-1", "P1", "P2", "P3"),
   weight = c(),
+  threshold = 0,
   rev = F,
   checkSymmetry = FALSE,
   withTable = TRUE,
@@ -30,6 +31,8 @@ of the same length}
 \item{pos_index}{Position names of the consensus sequence}
 
 \item{weight}{Weight parameters to feed into find_binding_site().}
+
+\item{threshold}{Threshold to evaluate recognized motifs.}
 
 \item{rev}{If true, also screens the reverse matrix. Usually used for non-symmetrical motifs}
 
