@@ -7,7 +7,8 @@
 getBaseLineAccuracy(mono_motifs, pos, randomSample = FALSE)
 }
 \arguments{
-\item{mono_motifs}{List of motifs that are input as frequency values (0-1 with highest of 1)}
+\item{mono_motifs}{List of motifs that are input as frequency values (0-1 with highest of 1), each element of the
+list has two slots, $name containing protienName_study, $matrix containing the scoring matrix}
 
 \item{pos}{Position in motif to extract}
 

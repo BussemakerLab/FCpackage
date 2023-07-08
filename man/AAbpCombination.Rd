@@ -11,7 +11,7 @@ AAbpCombination(mono_motifs, Alignment, AApos, motifPos)
 
 \item{Alignment}{Data frame of Alignment from concatAli}
 
-\item{AApos}{Position of residue along the protien alignment}
+\item{AApos}{Position of residue along the protein alignment}
 
 \item{motifPos}{Position of motif}
 }

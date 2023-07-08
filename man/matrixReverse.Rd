@@ -13,5 +13,5 @@ matrixReverse(matrix)
 The reversed binding motif matrix
 }
 \description{
-Get the binding matrix of the reverse of a binding
+Get the binding matrix of the reverse complement of a binding motif
 }

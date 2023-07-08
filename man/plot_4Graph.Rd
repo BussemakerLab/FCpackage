@@ -13,7 +13,7 @@ plot_4Graph(
 )
 }
 \arguments{
-\item{posMatrix}{Matrix of binding motifs at a specific motif position, result of gene2pos()}
+\item{posMatrix}{Matrix of binding motifs in frequency measurements at a specific motif position, result of gene2pos()}
 
 \item{base_colors}{Color of bases at the vertexes}
 

@@ -1,7 +1,7 @@
 Package: FamilyCode
 Type: Package
 Title: R Package For Family Code Framework
-Version: 0.1.3
+Version: 0.1.4
 Author: Shaoxun Liu
 Maintainer: Shaoxun Liu <sl4970@columbia.edu>
 Description: 
@@ -29,11 +29,8 @@ Imports:
   MASS,
   glmnet,
   lsa,
-  proteinStructureBoost,
   rlist,
   stats,
   utils,
   stringdist,
   graphics
-Remotes: 
-  ShaoxunLiu/proteinStructureBoost

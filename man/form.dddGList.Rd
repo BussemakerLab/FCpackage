@@ -15,7 +15,7 @@ form.dddGList(
 \arguments{
 \item{Alignment}{Data frame of Alignment from concatAli}
 
-\item{mono_motifs}{List of motifs output from loadMono_motifs()}
+\item{mono_motifs}{List of motifs in frequency measurements output from loadMono_motifs()}
 
 \item{keyPos}{Key positions along the alignment to screen}
 

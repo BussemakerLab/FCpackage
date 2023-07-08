@@ -4,15 +4,18 @@
 \alias{matchAliMotif}
 \title{Match Alignment and Motif}
 \usage{
-matchAliMotif(mono_motifs, Alignment)
+matchAliMotif(mono_motifs, Alignment, both = F)
 }
 \arguments{
 \item{mono_motifs}{List of motifs output from loadMono_motifs}
 
 \item{Alignment}{Data frame of Alignment from concatAli}
+
+\item{both}{If True both mono_motifs list and Alignment data frame is ouput; if False
+only Alignment data frame is output}
 }
 \value{
-A filtered and reordered Alignment table
+A filtered and reordered Alignment table (and mono_motif list)
 }
 \description{
 Match the order of mono_motifs list and Alignment data frame

@@ -4,10 +4,10 @@
 \alias{matrix2seq}
 \title{Matrix to Sequence}
 \usage{
-matrix2seq(scoringMatrix)
+matrix2seq(matrix)
 }
 \arguments{
-\item{scoringMatrix}{motif matrix with row names labeled as base types}
+\item{matrix}{motif matrix with row names labeled as base types}
 }
 \value{
 A string that contains the most preferred sequence of the scoring matrix

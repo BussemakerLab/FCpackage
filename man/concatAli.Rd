@@ -4,10 +4,10 @@
 \alias{concatAli}
 \title{Concatenate Alignment table}
 \usage{
-concatAli(Ali, start = 1, length = nchar(Ali[1, 2]))
+concatAli(Alignment, start = 1, length = nchar(Ali[1, 2]))
 }
 \arguments{
-\item{Ali}{Data frame with 2 columns, column 1 has names as identifiers and column 2 has a string of aligned sequence}
+\item{Alignment}{Data frame with 2 columns, column 1 has names as identifiers and column 2 has a string of aligned sequence}
 
 \item{start}{Starting position of the DNA-binding domain}
 

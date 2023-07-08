@@ -4,10 +4,10 @@
 \alias{normalize_sum1}
 \title{Normalize Sum to 1}
 \usage{
-normalize_sum1(mat, rows = TRUE)
+normalize_sum1(matrix, rows = TRUE)
 }
 \arguments{
-\item{mat}{Matrix to be normalized}
+\item{matrix}{Matrix to be normalized}
 
 \item{rows}{Logical that if true normalizes rows to 1, if false normalizes columns to 1}
 }

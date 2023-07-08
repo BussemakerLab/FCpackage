@@ -9,6 +9,8 @@ loadMono_motifs(
   modelFile_Template = "~/$modelFile$/result/fit.models.consensus.json",
   rec_seq = "CANNTG",
   pos_index = c("P-3", "P-2", "P-1", "P1", "P2", "P3"),
+  weight = c(),
+  rev = F,
   checkSymmetry = FALSE,
   withTable = TRUE,
   useMode = c()
@@ -22,9 +24,14 @@ ProBound running folders should be name as $gene_symbol_$study.}
 \item{modelFile_Template}{Path to a sample fit.models.consensus.json and switching
 the $gene_symbol_$study identifier to $modelFile$.}
 
-\item{rec_seq}{Consensus sequence to be recognized, use N for variable base positions}
+\item{rec_seq}{Consensus sequence to be recognized, use N for variable base positions. Can be a vector of character strings
+of the same length}
 
 \item{pos_index}{Position names of the consensus sequence}
+
+\item{weight}{Weight parameters to feed into find_binding_site().}
+
+\item{rev}{If true, also screens the reverse matrix. Usually used for non-symmetrical motifs}
 
 \item{checkSymmetry}{To check symmetry like bHLH protein, should be changed for families other than bHLH}
 

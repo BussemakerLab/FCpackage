@@ -36,10 +36,11 @@ writeFasta<-function(data, filename){
 #' Matrix to Sequence
 #'
 #' Output most preferred sequence of a motif matrix
-#' @param scoringMatrix motif matrix with row names labeled as base types
+#' @param matrix motif matrix with row names labeled as base types
 #' @return A string that contains the most preferred sequence of the scoring matrix
 #' @export
-matrix2seq <- function(scoringMatrix){
+matrix2seq <- function(matrix){
+  scoringMatrix <- matrix
   seq <- ''
   for(i in 1:ncol(scoringMatrix)){
     add <- rownames(scoringMatrix)[scoringMatrix[,i] == max(scoringMatrix[,i])]
@@ -114,11 +115,12 @@ JSON2Matrix <- function(JSON_text, expo = exp(1), mode = 1){
 #' Normalize Sum to 1
 #'
 #' Normalize the sum of each row or column of a matrix to 1
-#' @param mat Matrix to be normalized
+#' @param matrix Matrix to be normalized
 #' @param rows Logical that if true normalizes rows to 1, if false normalizes columns to 1
 #' @return Normalized matrix
 #' @export
-normalize_sum1 <- function(mat, rows = TRUE){
+normalize_sum1 <- function(matrix, rows = TRUE){
+  mat <- matrix
   if(rows){
     mat <- t(mat)
   }
@@ -137,12 +139,13 @@ normalize_sum1 <- function(mat, rows = TRUE){
 #' Concatenate Alignment table
 #'
 #' Concatenate .ali/.sto files from clustal omega and extract the alignment of the DNA-binding domain
-#' @param Ali Data frame with 2 columns, column 1 has names as identifiers and column 2 has a string of aligned sequence
+#' @param Alignment Data frame with 2 columns, column 1 has names as identifiers and column 2 has a string of aligned sequence
 #' @param start Starting position of the DNA-binding domain
 #' @param length length of the DNA-binding domain
 #' @return Data frame with 2 columns: name and aligned sequence of DNA-binding domain
 #' @export
-concatAli <- function(Ali, start = 1, length = nchar(Ali[1,2])){
+concatAli <- function(Alignment, start = 1, length = nchar(Ali[1,2])){
+  Ali <- Alignment
   names <- unique(Ali[,1])
   bHLH_pbAlignment <- matrix(nrow = length(names), ncol = 2)
   for(i in 1:length(names)){
@@ -167,8 +170,11 @@ concatAli <- function(Ali, start = 1, length = nchar(Ali[1,2])){
 #' ProBound running folders should be name as $gene_symbol_$study.
 #' @param modelFile_Template Path to a sample fit.models.consensus.json and switching
 #' the $gene_symbol_$study identifier to $modelFile$.
-#' @param rec_seq Consensus sequence to be recognized, use N for variable base positions
+#' @param rec_seq Consensus sequence to be recognized, use N for variable base positions. Can be a vector of character strings
+#' of the same length
 #' @param pos_index Position names of the consensus sequence
+#' @param weight Weight parameters to feed into find_binding_site().
+#' @param rev If true, also screens the reverse matrix. Usually used for non-symmetrical motifs
 #' @param checkSymmetry To check symmetry like bHLH protein, should be changed for families other than bHLH
 #' @param withTable If true, output with bHLH_index table with scoring and model number; if false, only output
 #' @param useMode List of binding modes to use, if left empty, the highest scored mode according to rec_seq
@@ -179,6 +185,8 @@ loadMono_motifs <- function(index,
                             modelFile_Template = '~/$modelFile$/result/fit.models.consensus.json',
                             rec_seq = 'CANNTG',
                             pos_index = c('P-3','P-2','P-1','P1','P2','P3'),
+                            weight = c(),
+                            rev = F,
                             checkSymmetry = FALSE,
                             withTable = TRUE,
                             useMode = c()){
@@ -202,15 +210,48 @@ loadMono_motifs <- function(index,
       while(loop){
         JSON_matrix <- tryCatch({
           JSON2Matrix(JSON_Lines, mode = m)
-        }, error = function(x){return(c())})
+        }, error = function(x){return(c())}, warning = function(w){})
         if(length(JSON_matrix) == 0){
           loop <- FALSE
         }else{
-          bind_pos <- find_binding_site(JSON_matrix, rec_seq)$max_pos[1]
-          score <- c(score, max(find_binding_site(JSON_matrix, rec_seq)$scores))
-          JSON_matrix_motif[[m]] <- JSON_matrix[,c(bind_pos:(bind_pos+nchar(rec_seq)-1))]
+          for(rec in 1:length(rec_seq)){
+            bestScore <- 0
+            rec_seq1 <- rec_seq[rec]
+            bindingSite <- find_binding_site(JSON_matrix, rec_seq1, threshold = 0, weight = weight)
+            bind_pos <- bindingSite$max_pos[1]
+            maxScore <- max(bindingSite$scores)
+            maxMatrix <- JSON_matrix
+            if(rev){
+              revMatrix <- matrixReverse(JSON_matrix)
+              revBindingSite <- find_binding_site(revMatrix, rec_seq1, threshold = 0, weight = weight)
+              revbind_pos <- revBindingSite$max_pos[1]
+              revmaxScore <- max(revBindingSite$scores)
+              if(revmaxScore > maxScore){
+                maxMatrix <- revMatrix
+                maxScore <- revmaxScore
+                bind_pos <- revbind_pos
+              }
+            }
+
+            if((bind_pos+nchar(rec_seq1)-1) > ncol(maxMatrix) || bind_pos < 1){
+              next()
+            }
+            if(maxScore > bestScore ){
+              bestScore <- maxScore
+              bestPos <- bind_pos
+              bestMatrix <- maxMatrix[,c(bestPos:(bestPos+nchar(rec_seq1)-1))]
+            }
+          }
+          score <- c(score, bestScore)
+          JSON_matrix_motif[[m]] <- bestMatrix
           m <- m+1
         }
+      }
+      if(length(score) == 0){
+        motif_model <- c(motif_model, NA)
+        model_score <- c(model_score, NA)
+        symmetry <- c(symmetry,NA)
+        next()
       }
       if(length(useMode) == 0){
         bestIndex <- which(score == max(score))[1]
@@ -243,6 +284,10 @@ loadMono_motifs <- function(index,
   }else{
     bHLH_model_info <- data.frame(bHLH_index, motif_model, model_score)
   }
+  if(length(which(is.na(bHLH_model_info$model_score))) != 0){
+    mono_motifs <- mono_motifs[-which(is.na(bHLH_model_info$model_score))]
+    bHLH_model_info <- bHLH_model_info[-which(is.na(bHLH_model_info$model_score)),]
+  }
   if(withTable){
     out <- list (motifs = mono_motifs, table = bHLH_model_info)
   }else{
@@ -255,7 +300,8 @@ loadMono_motifs <- function(index,
 #' Get base-line Accuracy
 #'
 #' Get the base-line accuracy for motif scoring according to different experiments performed on the same sample protein
-#' @param mono_motifs List of motifs that are input as frequency values (0-1 with highest of 1)
+#' @param mono_motifs List of motifs that are input as frequency values (0-1 with highest of 1), each element of the
+#' list has two slots, $name containing protienName_study, $matrix containing the scoring matrix
 #' @param pos Position in motif to extract
 #' @param randomSample If true, randomly select from studies of the sample protein; if fasle, takes the first two studies
 #' @return Data frame with two columns with pair-wise ddG values that can be plotted
@@ -378,12 +424,26 @@ AAcolor <- function(AAs){
 #' Match the order of mono_motifs list and Alignment data frame
 #' @param mono_motifs List of motifs output from loadMono_motifs
 #' @param Alignment Data frame of Alignment from concatAli
-#' @return A filtered and reordered Alignment table
+#' @param both If True both mono_motifs list and Alignment data frame is ouput; if False
+#' only Alignment data frame is output
+#' @return A filtered and reordered Alignment table (and mono_motif list)
 #' @export
-matchAliMotif <- function(mono_motifs, Alignment){
+matchAliMotif <- function(mono_motifs, Alignment, both = F){
+  geneNames <- unlist(lapply(mono_motifs, function(x) x$name))
+  dele <- c()
+  for(i in 1:length(geneNames)){
+    if(length(which(geneNames[i] == Alignment$name)) == 0){
+      dele <- c(dele, i)
+    }
+  }
+  if(length(dele) > 0){
+    mono_motifs <- mono_motifs[-dele]
+  }
   geneNames <- unlist(lapply(mono_motifs, function(x) x$name))
   rownames(Alignment) <- Alignment$name
-  out <- Alignment[geneNames,]
+  out <- list()
+  out$alignment <- Alignment[geneNames,]
+  out$motifs <- mono_motifs
   return(out)
 }
 
@@ -393,7 +453,7 @@ matchAliMotif <- function(mono_motifs, Alignment){
 #' colname labeled with the residue type at a given alignment position.
 #' @param mono_motifs List of motifs output from loadMono_motifs()
 #' @param Alignment Data frame of Alignment from concatAli
-#' @param AApos Position of residue along the protien alignment
+#' @param AApos Position of residue along the protein alignment
 #' @param motifPos Position of motif
 #' @return Matrix of binding motifs at a specific motif position, similar to result of gene2pos(),
 #' but with residue type as colnames instead of gene name.
@@ -407,7 +467,7 @@ AAbpCombination <- function(mono_motifs, Alignment, AApos, motifPos){
 #' Plot tetrahedron
 #'
 #' Generate a tetrahedron representation system and plot all data samples at a given motif position
-#' @param posMatrix Matrix of binding motifs at a specific motif position, result of gene2pos()
+#' @param posMatrix Matrix of binding motifs in frequency measurements at a specific motif position, result of gene2pos()
 #' @param base_colors Color of bases at the vertexes
 #' @param size Size of dots in the tetrahedron
 #' @param axis True to show axis
@@ -514,36 +574,44 @@ plot_tetrahedron <- function(posMatrix, base_colors = c('green','blue','orange',
 #' Find binding site
 #'
 #' Find the start position of a recognition sequence from a motif matrix and get the affinity score
-#' @param JSON_matrix Matrix of binding motifs at a specific motif position, result of gene2pos()
+#' @param JSON_matrix Matrix of binding motifs in frequency measurements at a specific motif position, result of gene2pos()
 #' @param rec_seq Consensus sequence to be recognized, use N for variable base positions
 #' @param threshold Threshold for score to consider as a matching sequence
+#' @param weight Weight of each position in rec_seq. Larger number resemble higher importance.
 #' @return A list of two numbers. max_pos: the start position of the recognized
 #' sequence with the highest score; score: the affinity score of the recognized
 #' sequence at the resulting position
 #' @export
-find_binding_site <- function(JSON_matrix,rec_seq,threshold = 0.5){
+find_binding_site <- function(JSON_matrix,rec_seq,threshold = 0.5, weight = c()){
+  if(length(weight) == 0){
+    weight <- rep(1,nchar(rec_seq))
+  }
+  if(length(weight) != nchar(rec_seq)){
+    print('Weight length different from rec_seq')
+    return(NA)
+  }
   #set output data structure
   out <- list(start_pos = c(), high_scores = c(), scores = c(), max_pos = 0)
   #normalize JSON_matrix
-  norm_matrix <- normalize_sum1(JSON_matrix, rows = FALSE)
+  norm_matrix <- JSON_matrix
   len_motif <- ncol(norm_matrix)
   len_rec_seq <- nchar(rec_seq)
   for(i in 1:(len_motif - len_rec_seq + 1)){
     score <- 0
     for(j in 1:len_rec_seq){
       if(substr(rec_seq,j,j) == 'N'){
-        score <- score + threshold
+        weight[j] <- 0
       }else{
-        score <- score + norm_matrix[substr(rec_seq,j,j),(i+j-1)]
+        score <- score + norm_matrix[substr(rec_seq,j,j),(i+j-1)]*weight[j]
       }
     }
-    score <- score/len_rec_seq
+    score <- score/sum(weight)
     if(score >= threshold){
       out$start_pos <- c(out$start_pos, i)
       out$high_scores <- c(out$high_scores, score)
     }
     out$scores <- c(out$scores, score)
-    out$max_pos <- grep(max(out$scores), out$scores)
+    out$max_pos <- out$start_pos[which(out$high_scores == max(out$high_scores))]
   }
   return(out)
 }
@@ -573,7 +641,7 @@ gene2pos <- function(motifs, pos = 'P1', nrow = 4){
 #' Plot 4-way tetrahedron
 #'
 #' Looking at a tetrahedron representation system from the 4 vertexes and plot all data samples at a given motif position
-#' @param posMatrix Matrix of binding motifs at a specific motif position, result of gene2pos()
+#' @param posMatrix Matrix of binding motifs in frequency measurements at a specific motif position, result of gene2pos()
 #' @param base_colors Color of bases at the vertexes
 #' @param size Size of dots in the tetrahedron
 #' @param label Show label of data points according to colnames of posMatrix
@@ -937,7 +1005,7 @@ mononucleotide_logo <- function(matrix, type="energy", axes=TRUE, reverse=FALSE,
 
 #' Matrix reverse
 #'
-#' Get the binding matrix of the reverse of a binding
+#' Get the binding matrix of the reverse complement of a binding motif
 #' @param matrix Binding matrix in either ddG or frequency.
 #' @return The reversed binding motif matrix
 #' @export
@@ -948,33 +1016,6 @@ matrixReverse <- function(matrix){
   rownames(matrix) <- baseOrder
   colnames(matrix) <- posOrder
   return(matrix)
-}
-
-#get sequence for mesh plotting in tetrahedron
-meshSeq <- function(n){
-  combSeq <- expand.grid(c(1:n),c(1:n))
-  combSeq <- combSeq[combSeq$Var1 > combSeq$Var2,]
-  nrow(combSeq)
-  seq <- c(n,n-1,n-2)
-  continue <- TRUE
-  while(nrow(combSeq) > 1){
-    V1 <- which(combSeq$Var1 == seq[length(seq)-2])
-    V2 <- which(combSeq$Var2 == seq[length(seq)-1])
-    dele <- intersect(V1, V2)
-    if(length(dele) > 0){
-      combSeq <- combSeq[-dele,]
-    }
-    V1 <- which(combSeq$Var2 == seq[length(seq)-2])
-    V2 <- which(combSeq$Var1 == seq[length(seq)-1])
-    dele <- intersect(V1, V2)
-    if(length(dele) > 0){
-      combSeq <- combSeq[-dele,]
-    }
-    seq <- c(seq, as.numeric(combSeq[1,]))
-    combSeq <- combSeq[-1,]
-  }
-  return(seq)
-
 }
 
 #' Tetrahedron transformation matrix
@@ -990,7 +1031,7 @@ tetra_trans_matrix <- function(){
 #'
 #' Create dddG matrix of selected key positions
 #' @param Alignment Data frame of Alignment from concatAli
-#' @param mono_motifs List of motifs output from loadMono_motifs()
+#' @param mono_motifs List of motifs in frequency measurements output from loadMono_motifs()
 #' @param keyPos Key positions along the alignment to screen
 #' @param posMotif Position in the matrix to screen
 #' @param leaveOut Samples from the alignment to be left out
@@ -1213,7 +1254,7 @@ AAfeatures <- function(){
 #' Matrix Singular Value Decomposition
 #'
 #' Compute the tetrahedron SVD matrices of a position specific motif matrix of multiple samples
-#' @param posMatrix Matrix of binding motifs at a specific motif position, result of gene2pos()
+#' @param posMatrix Matrix of binding motifs in frequency measurements at a specific motif position, result of gene2pos()
 #' @return u matrix, v matrix, d vector from SVD, and the mean of each column of the transformed
 #' tetrahedron coordinate matrix
 #' @export
@@ -1533,127 +1574,84 @@ aaPCmap <- function(mono_motifs, Alignment, pos = 'P-1', AApos = 13, PC = 1, pro
   return(summary(lm))
 }
 
-#deprecated
-pred.SVD.ridge <- function(alignment, tetra_matrix, testSeq = '-KSLRPLLEKRRRARINQSLSQLKGLI-L------PLLGRENS--NCSKLEKADVL', keyPos = c(1:55)){
-  tetra_means <- apply(tetra_matrix, 2,function(x) mean(x))
-  tetra_matrix <- apply(tetra_matrix, 2,function(x) x-mean(x))
-  svd <- svd(tetra_matrix)
-  trueList <- c()
-  predList <- c()
-  #keyPos <- unique(c(X1feature,X2feature,X3feature))
-  coefTable <- data.frame(NULL)
-
-  #average list
-  uList <- list()
-  for(i in 1:3){
-    rowList <- list()
-    for(j in keyPos){
-      u1 <- svd$u[,i]
-      aa <- substr(alignment$alignment,j,j)
-      dt <- cbind.data.frame(aa,u1)
-      aas <- unique(dt$aa)
-      means <- c()
-      for(a in aas){
-        subDt <- dt[dt$aa == a,]
-        means <- c(means, mean(subDt$u1))
-      }
-      meanDt <- data.frame(aa = aas, mean = means)
-      rowList[[j]] <- meanDt
-    }
-    uList[[i]] <- rowList
+#' Motif list to ddG matrix list
+#'
+#' Change motif matrices in a list to ddG measurements
+#' @param mono_motifs List of motif matrices
+#' @return List of mono_motifs. A warning will be print if the mono_motifs list does not
+#' have the $name tag.
+#' @export
+motifList2ddG <- function(mono_motifs){
+  if(length(mono_motifs[[1]]$name) == 0){
+    print('No name tag in found List')
   }
+  temp <- function(x){
+    if(sum(x$matrix[,1]) > 1){
+      x$matrix <- frequency2ddG(x$matrix)
+    }
+    return(x)
+  }
+  out <- lapply(mono_motifs, temp)
+  return(out)
+}
 
-  #synthetic U matrix
-  synUList <- list()
-  for(ali in 1:nrow(alignment)){
-    synU <- list()
+#' Motif list to frequency matrix list
+#'
+#' Change motif matrices in a list to frequency measurements
+#' @param mono_motifs List of motif matrices
+#' @return List of mono_motifs. A warning will be print if the mono_motifs list does not
+#' have the $name tag.
+#' @export
+motifList2frequency <- function(mono_motifs){
+  if(length(mono_motifs[[1]]$name) == 0){
+    print('No name tag in found List')
+  }
+  temp <- function(x){
+    if(sum(x$matrix[,1]) < 1){
+      x$matrix <- ddG2frequency(x$matrix)
+    }
+    return(x)
+  }
+  out <- lapply(mono_motifs, temp)
+  return(out)
+}
+
+#' Inspect feature SVD
+#'
+#' Inspect the correlation between amino acid properties and SVD PC values
+#' @param svd Output from matrixSVD()
+#' @param Alignment The alignment resulted from concatAli, ideally after matchAliMotif().
+#' @return List of 3 matrices, each matrix records the p-value of linear regression
+#'  between SVD PCs and one of the three AAfeatures.
+#' @export
+inspectFeatureSVD <- function(svd, Alignment){
+  AAfeature <- AAfeatures()
+  properties <- c('Hydropathy', 'Volumn', 'Isoelectic Point')
+  PCs <- c('PC1','PC2','PC3')
+  AAfeature$AA <- rownames(AAfeature)
+  upRsqMatrixList <- list()
+  for (p in 1:3){
+    upRsqMatrix <- matrix(nrow = nchar(Alignment$alignment[1]), ncol = 3, data = 0)
     for(i in 1:3){
-      addList <- c()
-      for(j in keyPos){
-        aa <- substr(alignment$alignment[ali],j,j)
-        uset <- uList[[i]][[j]]
-        add <- uset[uset$aa == aa, 2]
-        addList <- c(addList, add)
-      }
-      synU[[i]] <- addList
-    }
-    synUList[[ali]] <- synU
-  }
-
-  #get linear regression coefficients
-  synUpred <- list()
-  coefList <- list()
-  for(uindex in 1:3){
-    synthesizedU <- matrix(nrow = nrow(alignment), ncol = length(keyPos))
-    for(i in 1:nrow(alignment)){
-      synthesizedU[i,] <- synUList[[i]][[uindex]]
-    }
-    synthesizedU <- data.frame(synthesizedU)
-    synthesizedU$label <- svd$u[,uindex]
-    cv.glm <- glmnet::cv.glmnet(as.matrix(synthesizedU[,-ncol(synthesizedU)]), synthesizedU$label, alpha = 0)
-    best_lambda <- cv.glm$lambda.min
-    best_model <- glmnet::glmnet(as.matrix(synthesizedU[,-ncol(synthesizedU)]), synthesizedU$label, alpha = 0, lambda = best_lambda)
-    #print(best_lambda)
-    summary(best_model)
-    coef <- as.vector(coef(best_model))
-    coef[coef == '.'] <- 0
-    coefList[[uindex]] <- coef
-
-    newU <- c()
-    for(i in 1:nrow(alignment)){
-      add <- sum(synthesizedU[i,1:length(keyPos)]*coef[1:length(keyPos)+1]) + coef[1]
-      newU <- c(newU,add)
-    }
-    synUpred[[uindex]] <- newU
-  }
-
-
-  Upred <- matrix(nrow = nrow(alignment), ncol = 3)
-  for(i in 1:3){
-    Upred[,i] <- synUpred[[i]]
-  }
-
-  reSvd <- Upred %*% diag(svd$d) %*% t(svd$v)
-  #print(RMSD(reSvd, tetra_matrix[-interation,]))
-
-  #test
-  synUtest <- list()
-  for(i in 1:3){
-    addList <- c()
-    for(j in keyPos){
-      aa <- substr(testSeq,j,j)
-      uset <- uList[[i]][[j]]
-      add <- uset[uset$aa == aa, 2]
-      if(length(add) == 0){
-        addList <- c(addList, 0)
-      }else{
-        addList <- c(addList, add)
+      for(j in 1:nchar(Alignment$alignment[1])){
+        u1 <- svd$u[,i]
+        aa <- substr(Alignment$alignment,j,j)
+        dt <- cbind.data.frame(AA = aa,u1)
+        dt <- merge(dt, AAfeature, by = 'AA')
+        f <- stats::as.formula(paste0('u1~', colnames(dt)[p+2]))
+        lm <- lm(f, dt)
+        if(is.na(lm[1]$coefficients[2])){
+          next()
+        }
+        summary <- summary(lm(f, dt))
+        if(nrow(summary$coefficients) == 1){
+          next()
+        }
+        rsq <- -log(summary$coefficients[2,4], 10)
+        upRsqMatrix[j,i] <- rsq
       }
     }
-    synUtest[[i]] <- addList
+    upRsqMatrixList[[properties[p]]] <- upRsqMatrix
   }
-
-  predTest <- c()
-  for(i in 1:3){
-    predTest <- c(predTest, sum(coefList[[i]][1:length(keyPos)+1] * synUtest[[i]]) + coefList[[i]][1])
-  }
-  pred <- predTest %*% diag(svd$d) %*% t(svd$v)
-  #print(RMSD(pred,tetra_matrix[interation,]))
-
-
-  tetra_trans_matrix <- matrix(data = c(1,1,1,1,-1,-1,-1,1,-1,-1,-1,1), nrow = 4, ncol = 3, byrow = TRUE)
-  pssm_trans_matrix <- MASS::ginv(tetra_trans_matrix)
-
-  mean_matrix <- matrix(nrow = 1, ncol = 3, data = tetra_means, byrow = T)
-
-  #apply(t((tetra_matrix+mean_matrix)%*%pssm_trans_matrix + 0.25), 2, function(x) x/max(x)) - pos_matrix
-
-  predMatrix <- matrix(nrow = 1, ncol = 3, data = pred, byrow = T)
-  predMatrix1 <- apply(t((predMatrix+mean_matrix)%*%pssm_trans_matrix + 0.25), 2, function(x) x/max(x))
-
-  predMatrix1[predMatrix1 < 0] <- 0.001
-
-  pred <- unlist(data.frame(apply(log(predMatrix1), 2, function(column) column - mean(column))))
-  pred <- as.vector(pred)
-  return(pred)
+  return(upRsqMatrixList)
 }
