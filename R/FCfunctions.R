@@ -1668,6 +1668,7 @@ inspectFeatureSVD <- function(svd, Alignment){
 #' Leave-one-out cross-validation for SVD-regression model
 #' @param mono_motifs Motif samples to incldue in the CV test, result from loadMono_motifs().
 #' @param Alignment The alignment resulted from concatAli, ideally after matchAliMotif().
+#' @param pos Position of the binding matrix to predict.
 #' @return A data frame with two columns of true and predicted values
 #' @export
 SVDregression.CV <- function(mono_motifs, Alignment, pos = 'P-1'){
@@ -1681,12 +1682,12 @@ SVDregression.CV <- function(mono_motifs, Alignment, pos = 'P-1'){
     train_alignment <- matchAliMotif(train_motifs, HDAlignment, both = T)$alignment
     test_alignment <- matchAliMotif(test_motifs, HDAlignment, both = T)$alignment
     #Train svd-regression model
-    svd <- matrixSVD(gene2pos(train_motifs, pos = posM))
+    svd <- matrixSVD(gene2pos(train_motifs, pos = pos))
     svdModel <- trainSVD(svd, train_alignment)
     #Predict binding motifs for test set
-    pred_motifs <- predict(svdModel, test_alignment, zero = 0.01)
+    pred_motifs <- predict.SVD(svdModel, test_alignment, zero = 0.01)
     #Comparing between true and predicted testing set motifs
-    true <- frequency2ddG(gene2pos(test_motifs, pos = posM))
+    true <- frequency2ddG(gene2pos(test_motifs, pos = pos))
     pred <- frequency2ddG(pred_motifs)
     add <- data.frame(true = unlist(as.numeric(true)), pred = unlist(as.numeric(pred)))
     predTrue <- rbind.data.frame(predTrue, add)
