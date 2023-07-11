@@ -1487,9 +1487,10 @@ predict.SVD <- function(object, Alignment, zero = 0.001, ...){
 #' @param x Vector 1
 #' @param y Vector 2
 #' @param member number of member of each group
+#' @param mean If true, returns the mean of all groups; if false, returns a vector of each R-square value
 #' @return Average R-square value
 #' @export
-groupedR2 <- function(x,y,member = 4){
+groupedR2 <- function(x,y,member = 4, mean = T){
   group <- member
   if(length(x)!=length(y)){
     print('x and y have different length')
@@ -1511,7 +1512,12 @@ groupedR2 <- function(x,y,member = 4){
     add <- suppressWarnings(summary(lm)$r.squared)
     R2s <- c(R2s, add)
   }
-  return(mean(R2s))
+  if(mean){
+    return(mean(R2s))
+  }else{
+    return(R2s)
+  }
+
 }
 
 #' Closest sequence prediction
@@ -1694,3 +1700,4 @@ SVDregression.CV <- function(mono_motifs, Alignment, pos = 'P-1'){
   }
   return(predTrue)
 }
+
