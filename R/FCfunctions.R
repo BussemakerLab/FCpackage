@@ -1701,3 +1701,33 @@ SVDregression.CV <- function(mono_motifs, Alignment, pos = 'P-1'){
   return(predTrue)
 }
 
+#' Amino acid type ploted against principal components in box plot
+#'
+#' Make box plot of amino acid types and PC values
+#' @param mono_motifs List of motifs that are input as frequency values (0-1 with highest of 1)
+#' @param Alignment The alignment resulted from concatAli
+#' @param pos Binding matrix position to extract
+#' @param AApos Residue position along the alignment
+#' @param PC Principal componant to screen
+#' @return box plot
+#' @export
+aaPCboxPlot <- function(mono_motifs, Alignment, pos = 'P-1', AApos = 13, PC = 1){
+  svd <- matrixSVD(gene2pos(mono_motifs, pos))
+  i <- PC
+  j <- AApos
+  u1 <- svd$u[,i]
+  aa <- substr(Alignment$alignment,j,j)
+  AAf <- AAfeatures()
+  AAf$AA <- rownames(AAf)
+  dt <- cbind.data.frame(AA = aa,u1)
+  cols <- AAcolor(as.character(levels(as.factor(dt$AA))))
+  plot <- graphics::boxplot(u1~AA,
+          data=dt,
+          main="PC value of Amino Acid types",
+          xlab="Amino Acid resiue type",
+          ylab="PC",
+          col=cols,
+          border="black"
+  )
+  return(plot)
+}
