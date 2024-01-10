@@ -168,6 +168,7 @@ concatAli <- function(Alignment, start = 1, length = nchar(Ali[1,2])){
 #' @param index data frame containing the identifiers of each experiment,
 #' contains protein name as $gene_symbol and study name as $study in the first two column,
 #' ProBound running folders should be name as $gene_symbol_$study.
+#' Or can be a vector of protein names.
 #' @param modelFile_Template Path to a sample fit.models.consensus.json and switching
 #' the $gene_symbol_$study identifier to $modelFile$.
 #' @param rec_seq Consensus sequence to be recognized, use N for variable base positions. Can be a vector of character strings
@@ -191,16 +192,26 @@ loadMono_motifs <- function(index,
                             rev = F,
                             checkSymmetry = FALSE,
                             withTable = TRUE,
-                            useMode = c()){
+                            useMode = c()
+                            ){
+  if(is.null(ncol(index))){
+    len <- length(index)
+  }else{
+    len <- nrow(index)
+  }
   bHLH_index <- index
   mono_motifs <- list()
   motif_model <- c()
   symmetry <- c()
   model_score <- c()
   n <- 0
-  for(i in 1:nrow(bHLH_index)){
+  for(i in 1:len){
     tryCatch({
-      name <- paste0(bHLH_index$gene_symbol[i], '_',bHLH_index$study[i])
+      if(is.null(ncol(index))){
+        name <- index[i]
+      }else{
+        name <- paste0(bHLH_index$gene_symbol[i], '_',bHLH_index$study[i])
+      }
       modelFile <- gsub("\\$modelFile\\$", name, modelFile_Template)
       JSON_Lines <- readLines(modelFile)
 
@@ -208,7 +219,9 @@ loadMono_motifs <- function(index,
       score <- c()
       JSON_matrix_motif <- list()
       loop <- TRUE
+
       m <- 1
+
       while(loop){
         JSON_matrix <- tryCatch({
           JSON2Matrix(JSON_Lines, mode = m)
@@ -264,7 +277,7 @@ loadMono_motifs <- function(index,
       model_score <- c(model_score, score[bestIndex])
       JSON_matrix_motif <- JSON_matrix_motif[[bestIndex]]
 
-      colnames(JSON_matrix_motif) <- pos_index
+      colnames(JSON_matrix_motif) <- pos_index[1:ncol(JSON_matrix_motif)]
 
       if(checkSymmetry){
         #check for symmetry, specific for bHLH can be deleted is not relevant
@@ -394,7 +407,7 @@ getPvalTable <- function(mono_motifs, Alignment, pos_index = c('P-3','P-2','P-1'
 #' @return vector of HEX string representing the colors
 #' @export
 AAcolor <- function(AAs){
-  AA <- c('A','C','D','E','F','G','H','I','K','L','M','N','P','Q','R','S','T','V','W','Y','-')
+  AA <- c('A','C','D','E','F','G','H','I','K','L','M','N','P','Q','R','S','T','V','W','X','Y','-')
   colors <- c('#ff9966',
                '#009999',
                '#ff0000',
@@ -414,6 +427,7 @@ AAcolor <- function(AAs){
                '#00ffff',
                '#ffcc33',
                '#66cc66',
+               '#000000',
                '#006600',
                '#FEFEFE'
                )
@@ -473,18 +487,21 @@ AAbpCombination <- function(mono_motifs, Alignment, AApos, motifPos){
 #' Plot tetrahedron
 #'
 #' Generate a tetrahedron representation system and plot all data samples at a given motif position
+#' @importFrom plotly add_text
 #' @param posMatrix Matrix of binding motifs in frequency measurements at a specific motif position, result of gene2pos()
 #' @param base_colors Color of bases at the vertexes
 #' @param size Size of dots in the tetrahedron
 #' @param axis True to show axis
 #' @param label Show label of data points according to colnames of posMatrix
 #' @param color Color sample points according to AA identity, only when colnames of posMatrix are 1 letter AA identifiers
+#' @param vertex Show label of vertex
 #' @return 3D Plotly plot
 #' @export
-plot_tetrahedron <- function(posMatrix, base_colors = c('green','blue','orange','red'), size = 5, axis = FALSE, label = F, color = F){
+plot_tetrahedron <- function(posMatrix, base_colors = c('green','blue','orange','red'), size = 5, axis = FALSE, label = F, color = F, vertex = F){
   JSON_matrix <- posMatrix
   if(color){
-    resis <- unique(colnames(JSON_matrix))
+    resis <- unique(as.factor(colnames(JSON_matrix)))
+    resis <- as.character(levels(resis))
     resiColors <- AAcolor(resis)
   }else{
     resiColors <- '#000000'
@@ -531,32 +548,36 @@ plot_tetrahedron <- function(posMatrix, base_colors = c('green','blue','orange',
               mode = 'lines',
               line = list(width = 1),
               opacity = 0.5,
-              name = 'tetrahedron')%>%
+              name = 'tetrahedron',
+              showlegend = F)%>%
     add_trace(bases, x = as.numeric(bases[1,1]), y = as.numeric(bases[1,2]), z = as.numeric(bases[1,3]), color = I(base_colors[1]),
               type = 'scatter3d',
               mode = 'markers',
               marker = list(size = size, opacity = 1),
-              name = base_names[1])%>%
+              name = base_names[1],
+              showlegend = F)%>%
     add_trace(bases, x = as.numeric(bases[2,1]), y = as.numeric(bases[2,2]), z = as.numeric(bases[2,3]), color = I(base_colors[2]),
               type = 'scatter3d',
               mode = 'markers',
               marker = list(size = size, opacity = 1),
-              name = base_names[2])%>%
+              name = base_names[2],
+              showlegend = F)%>%
     add_trace(bases, x = as.numeric(bases[3,1]), y = as.numeric(bases[3,2]), z = as.numeric(bases[3,3]), color = I(base_colors[3]),
               type = 'scatter3d',
               mode = 'markers',
               marker = list(size = size, opacity = 1),
-              name = base_names[3])%>%
+              name = base_names[3],
+              showlegend = F)%>%
     add_trace(bases, x = as.numeric(bases[4,1]), y = as.numeric(bases[4,2]), z = as.numeric(bases[4,3]), color = I(base_colors[4]),
               type = 'scatter3d',
               mode = 'markers',
               marker = list(size = size, opacity = 1),
-              name = base_names[4])%>%
+              name = base_names[4],
+              showlegend = F)%>%
     add_trace(df, x = df[1:len,1], y=df[1:len,2],z=df[1:len,3], color = I(resiCol),
               type = 'scatter3d',
               mode = 'markers',
-              size = size,
-              opacity = 0.8,
+              marker = list(size = size/2, opacity = 0.8),
               name = 'Entries',
               showlegend = F)
 
@@ -569,6 +590,11 @@ plot_tetrahedron <- function(posMatrix, base_colors = c('green','blue','orange',
                                  name = 'label',
                                  textfont = list(color = 'grey', size = size*2),
                                  opacity = 0.5)
+  }
+  if(vertex){
+    plot3D <- plot3D%>%add_text(x = bases[,1], y = bases[,2], z = bases[,3], text = c('A','C', 'G', 'T'),color = I(base_colors[1:4]),
+             textposition = 'top right', showlegend = F, textfont = list(family="sans serif",size = size*3)
+    )
   }
   if(!axis){
     plot3D <- plot3D%>%layout(scene = list(xaxis = axx, yaxis = axx, zaxis = axx))
@@ -994,7 +1020,6 @@ mononucleotide_logo <- function(matrix, type="energy", axes=TRUE, reverse=FALSE,
         plot <- plot + ggplot2::ylab("Probability")
       }
     }
-
     suppressMessages(
       if (!axes) {
         plot <- plot + no_axes
@@ -1510,6 +1535,9 @@ groupedR2 <- function(x,y,member = 4, mean = T){
       add <- 0
     }
     add <- suppressWarnings(summary(lm)$r.squared)
+    if(lm$coefficients[1] <= 0){
+      add <- 0
+    }
     R2s <- c(R2s, add)
   }
   if(mean){
@@ -1576,6 +1604,7 @@ aaPCmap <- function(mono_motifs, Alignment, pos = 'P-1', AApos = 13, PC = 1, pro
   AAf$AA <- rownames(AAf)
   dt <- cbind.data.frame(AA = aa,u1)
   dt <- merge(dt, AAf, by = 'AA')
+  dt <- dt[dt$AA != '-',]
   f <- stats::as.formula(paste0('u1~', colnames(dt)[p+2]))
   plot(dt[,p+2], dt$u1, pch = 19, xlab = colnames(AAf)[p], ylab = paste0('PC:', i), main = paste0('AA Position ', j))
   lm <- lm(f, dt)
@@ -1678,9 +1707,11 @@ inspectFeatureSVD <- function(svd, Alignment){
 #' @return A data frame with two columns of true and predicted values
 #' @export
 SVDregression.CV <- function(mono_motifs, Alignment, pos = 'P-1'){
+  trainSVDModel <- trainSVD
   HDmotifs <- mono_motifs
   HDAlignment <- Alignment
   posM <- pos
+  no.keyPos <- matrix(nrow = length(HDmotifs), ncol = 3, data = 0)
   predTrue <- data.frame(NULL)
   for(t in 1:length(HDmotifs)){
     train_motifs <- HDmotifs[-t]
@@ -1689,15 +1720,17 @@ SVDregression.CV <- function(mono_motifs, Alignment, pos = 'P-1'){
     test_alignment <- matchAliMotif(test_motifs, HDAlignment, both = T)$alignment
     #Train svd-regression model
     svd <- matrixSVD(gene2pos(train_motifs, pos = pos))
-    svdModel <- trainSVD(svd, train_alignment)
+    svdModel <- trainSVDModel(svd, train_alignment)
+    no.keyPos[t,] <- unlist(lapply(svdModel$keyPos,function(x) length(x)))
     #Predict binding motifs for test set
-    pred_motifs <- predict.SVD(svdModel, test_alignment, zero = 0.01)
+    pred_motifs <- predict(svdModel, test_alignment, zero = 0.01)
     #Comparing between true and predicted testing set motifs
     true <- frequency2ddG(gene2pos(test_motifs, pos = pos))
     pred <- frequency2ddG(pred_motifs)
     add <- data.frame(true = unlist(as.numeric(true)), pred = unlist(as.numeric(pred)))
     predTrue <- rbind.data.frame(predTrue, add)
   }
+  attr(predTrue, 'no.keyPos') <- no.keyPos
   return(predTrue)
 }
 
@@ -1720,14 +1753,192 @@ aaPCboxPlot <- function(mono_motifs, Alignment, pos = 'P-1', AApos = 13, PC = 1)
   AAf <- AAfeatures()
   AAf$AA <- rownames(AAf)
   dt <- cbind.data.frame(AA = aa,u1)
+  dt <- dt[dt$AA != '-',]
   cols <- AAcolor(as.character(levels(as.factor(dt$AA))))
   plot <- graphics::boxplot(u1~AA,
           data=dt,
-          main="PC value of Amino Acid types",
+          main=paste0('AA Position ', j),
           xlab="Amino Acid resiue type",
-          ylab="PC",
+          ylab=paste0('PC:', i),
           col=cols,
           border="black"
   )
   return(plot)
+}
+
+#' Train SVD-regression model with Iterative method
+#'
+#' Train a SVD-regression model with matrixSVD and matched Alignment with Iterative method
+#' @param svd Result from matrixSVD()
+#' @param Alignment Alignment table with name and aligned sequences in the same order as the matrixSVD input
+#' @param Ftest_pVal Threshold for F-test
+#' @return SVD-regression model
+#' @export
+trainSVD.Iterative <- function(svd, Alignment, Ftest_pVal = 0.1){
+  nf <- nchar(Alignment$alignment[1])
+  no.keyPos <- c(nf,nf,nf)
+  alignment <- Alignment
+  keypos <- c()
+  svd.pvalTable <- svdANOVA(svd, alignment)
+  keyPos <- list()
+  for(i in 1:length(no.keyPos)){
+    X1feature <- dplyr::arrange(svd.pvalTable, dplyr::desc(svd.pvalTable[,i]))[1:no.keyPos[i], 'name']
+    sele <- rep(X1feature[1], max(no.keyPos))
+    sele[1:no.keyPos[i]] <- X1feature
+    keyPos[[i]] <- sele
+  }
+
+
+
+  #average list
+  uList <- list()
+  for(i in 1:length(no.keyPos)){
+    rowList <- list()
+    for(j in 1:nchar(alignment$alignment[1])){
+      u1 <- svd$u[,i]
+      aa <- substr(alignment$alignment,j,j)
+      dt <- cbind.data.frame(aa,u1)
+      aas <- unique(dt$aa)
+      means <- c()
+      for(a in aas){
+        subDt <- dt[dt$aa == a,]
+        means <- c(means, mean(subDt$u1))
+      }
+      meanDt <- data.frame(aa = aas, mean = means)
+      rowList[[j]] <- meanDt
+    }
+    uList[[i]] <- rowList
+  }
+
+  #synthetic U matrix
+  synUList <- list()
+  for(ali in 1:nrow(alignment)){
+    synU <- list()
+    for(i in 1:length(no.keyPos)){
+      addList <- c()
+      for(j in 1:nchar(alignment$alignment[1])){
+        aa <- substr(alignment$alignment[ali],j,j)
+        uset <- uList[[i]][[j]]
+        add <- uset[uset$aa == aa, 2]
+        addList <- c(addList, add)
+      }
+      synU[[i]] <- addList
+    }
+    synUList[[ali]] <- synU
+  }
+
+  #get linear regression coefficients
+  synUpred <- list()
+  coefList <- list()
+  keyPosAdd <- list()
+  for(uindex in 1:length(no.keyPos)){
+    synthesizedU <- matrix(nrow = nrow(alignment), ncol = nchar(alignment$alignment[1]))
+    for(i in 1:nrow(alignment)){
+      synthesizedU[i,] <- synUList[[i]][[uindex]]
+    }
+    synthesizedU <- data.frame(synthesizedU)
+    synthesizedU$label <- svd$u[,uindex]
+
+    addedPos <- keyPos[[uindex]][1]
+    for(ff in 1:(ncol(synthesizedU)-2)){
+      trainEpoc <- synthesizedU[,c(addedPos,ncol(synthesizedU))]
+      lm1 <- lm(label~., trainEpoc)
+      nextPos <- keyPos[[uindex]][1+ff]
+      nextEpoc <- synthesizedU[,c(addedPos,nextPos,ncol(synthesizedU))]
+      lm2 <- lm(label~., nextEpoc)
+      Ftest <- anova(lm1,lm2)
+      pFtest <- Ftest$`Pr(>F)`[2]
+      if(is.na(pFtest)){
+        break()
+      }
+      if(pFtest < Ftest_pVal){
+        addedPos <- c(addedPos, nextPos)
+      }else{
+        break()
+      }
+    }
+
+    coef <- lm1$coefficients
+    coef[is.na(coef)] <- 0
+    coefList[[uindex]] <- coef
+
+    newU <- c()
+    for(i in 1:nrow(alignment)){
+      add <- sum(synthesizedU[i,addedPos]*coef[1:length(addedPos)+1]) + coef[1]
+      newU <- c(newU,add)
+    }
+    synUpred[[uindex]] <- newU
+    keyPosAdd[[uindex]] <- addedPos
+  }
+
+
+  Upred <- matrix(nrow = nrow(alignment), ncol = length(no.keyPos))
+  for(i in 1:length(no.keyPos)){
+    Upred[,i] <- synUpred[[i]]
+  }
+
+  reSvd <- Upred %*% diag(svd$d) %*% t(svd$v)
+  true <- svd$u %*% diag(svd$d) %*% t(svd$v)
+  trainingRMSD <- RMSD(reSvd, true)
+  out <- list()
+  out$model <- coefList
+  out$svd <- svd
+  out$keyPos <- keyPosAdd
+  out$trainRMSD <- trainingRMSD
+  out$trainPred <- reSvd
+  out$uList <- uList
+  class(out) <- 'SVD'
+  return(out)
+}
+
+#' SVD-regression Cross-validation for Iterative method
+#'
+#' Leave-one-out cross-validation for SVD-regression model with Iterative feature selection method
+#' @param mono_motifs Motif samples to incldue in the CV test, result from loadMono_motifs().
+#' @param Alignment The alignment resulted from concatAli, ideally after matchAliMotif().
+#' @param pos Position of the binding matrix to predict.
+#' @param Ftest_pVal Threshold for F-test, only used when iterative is True.
+#' @return A data frame with two columns of true and predicted values
+#' @export
+SVDregression.Iterative.CV <- function(mono_motifs, Alignment, pos = 'P-1', Ftest_pVal = 0.1){
+
+  trainSVDModel <- trainSVD.Iterative
+
+  HDmotifs <- mono_motifs
+  HDAlignment <- Alignment
+  posM <- pos
+  no.keyPos <- matrix(nrow = length(HDmotifs), ncol = 3, data = 0)
+  predTrue <- data.frame(NULL)
+  for(t in 1:length(HDmotifs)){
+    train_motifs <- HDmotifs[-t]
+    test_motifs <- HDmotifs[t]
+    train_alignment <- matchAliMotif(train_motifs, HDAlignment, both = T)$alignment
+    test_alignment <- matchAliMotif(test_motifs, HDAlignment, both = T)$alignment
+    #Train svd-regression model
+    svd <- matrixSVD(gene2pos(train_motifs, pos = pos))
+    svdModel <- trainSVDModel(svd, train_alignment, Ftest_pVal = Ftest_pVal)
+    no.keyPos[t,] <- unlist(lapply(svdModel$keyPos,function(x) length(x)))
+    #Predict binding motifs for test set
+    pred_motifs <- predict(svdModel, test_alignment, zero = 0.01)
+    #Comparing between true and predicted testing set motifs
+    true <- frequency2ddG(gene2pos(test_motifs, pos = pos))
+    pred <- frequency2ddG(pred_motifs)
+    add <- data.frame(true = unlist(as.numeric(true)), pred = unlist(as.numeric(pred)))
+    predTrue <- rbind.data.frame(predTrue, add)
+  }
+  attr(predTrue, 'no.keyPos') <- no.keyPos
+  return(predTrue)
+}
+
+#' Tetrahedron to Matrix
+#'
+#' Transform tetrahedron coordinate representation of PSSM to PSSM
+#' @param tetraMatrix Tetrahedron coordinates, result from matrix2tetrahedron
+#' @return A PSSM
+#' @export
+tetrahedron2matrix <- function(tetraMatrix){
+  tetra_trans_matrix <- matrix(data = c(1,1,1,1,-1,-1,-1,1,-1,-1,-1,1), nrow = 4, ncol = 3, byrow = TRUE)
+  pssm_trans_matrix <- MASS::ginv(tetra_trans_matrix)
+  predMatrix1 <- apply(t((tetraMatrix)%*%pssm_trans_matrix + 0.25), 2, function(x) x/max(x))
+  return(predMatrix1)
 }

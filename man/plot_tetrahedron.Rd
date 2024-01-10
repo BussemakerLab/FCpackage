@@ -10,7 +10,8 @@ plot_tetrahedron(
   size = 5,
   axis = FALSE,
   label = F,
-  color = F
+  color = F,
+  vertex = F
 )
 }
 \arguments{
@@ -25,6 +26,8 @@ plot_tetrahedron(
 \item{label}{Show label of data points according to colnames of posMatrix}
 
 \item{color}{Color sample points according to AA identity, only when colnames of posMatrix are 1 letter AA identifiers}
+
+\item{vertex}{Show label of vertex}
 }
 \value{
 3D Plotly plot

@@ -20,7 +20,8 @@ loadMono_motifs(
 \arguments{
 \item{index}{data frame containing the identifiers of each experiment,
 contains protein name as $gene_symbol and study name as $study in the first two column,
-ProBound running folders should be name as $gene_symbol_$study.}
+ProBound running folders should be name as $gene_symbol_$study.
+Or can be a vector of protein names.}
 
 \item{modelFile_Template}{Path to a sample fit.models.consensus.json and switching
 the $gene_symbol_$study identifier to $modelFile$.}
