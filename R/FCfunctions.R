@@ -1339,6 +1339,7 @@ svdANOVA <- function(svd, Alignment){
 #' no.keyPos should still be entered for the number of keyPos used for each PC. If using 0 keyPos for a PC,
 #' enter a valid keypos number and put 0 in the no.keyPos vector for this PC.
 #' @return SVD-regression model
+#' @importFrom stats anova lm predict
 #' @export
 trainSVD <- function(svd, Alignment, no.keyPos = c(), keyPos = c()){
   if(length(no.keyPos) == 0){
