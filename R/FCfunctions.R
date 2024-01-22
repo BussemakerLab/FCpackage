@@ -77,16 +77,22 @@ pymolOpenFiles <- function(RA.files, pymol.dir, pml = '~/pymolBash.pml'){
 #' @param script Vector of String with each element containing a line of command
 #' @return promt: pymol started
 #' @export
-run.pymol <- function(pymol.dir = 'E:/pymol/pymol_app/pyMOLWin.exe',
+run.pymol <- function(pymol.dir = '~/pyMOLWin.exe',
                       pml = '~/pymolScript.pml',
                       script){
   cat('#run pymol \n', file = pml, append = F)
   for(i in 1:length(script)){
     cat(script[i],' \n', sep = '', file = pml, append = T)
   }
-  cmd <- paste(pymol.dir, ' ', pml, sep = '')
-  system(cmd, wait = TRUE)
-  return('Pymol started')
+  if(file.exists(pymol.dir)){
+    cmd <- paste(pymol.dir, ' ', pml, sep = '')
+    system(cmd, wait = TRUE)
+    file.remove(pml)
+    return('Pymol started')
+  }else{
+    warning('Pymol executable not found. Please download pymol from https://pymol.org/2/ and assign the full path to the pymol executable to the pymol.dir argument.')
+  }
+
 }
 
 #' JSON to Matrix

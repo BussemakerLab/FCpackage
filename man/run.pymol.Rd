@@ -4,11 +4,7 @@
 \alias{run.pymol}
 \title{Run pymol}
 \usage{
-run.pymol(
-  pymol.dir = "E:/pymol/pymol_app/pyMOLWin.exe",
-  pml = "~/pymolScript.pml",
-  script
-)
+run.pymol(pymol.dir = "~/pyMOLWin.exe", pml = "~/pymolScript.pml", script)
 }
 \arguments{
 \item{pymol.dir}{Path to pymol executable}
