@@ -4,7 +4,12 @@
 \alias{run.pymol}
 \title{Run pymol}
 \usage{
-run.pymol(pymol.dir = "~/pyMOLWin.exe", pml = "~/pymolScript.pml", script)
+run.pymol(
+  pymol.dir = "~/pyMOLWin.exe",
+  pml = "pymolScript.pml",
+  script,
+  wait = FALSE
+)
 }
 \arguments{
 \item{pymol.dir}{Path to pymol executable}
@@ -12,6 +17,8 @@ run.pymol(pymol.dir = "~/pyMOLWin.exe", pml = "~/pymolScript.pml", script)
 \item{pml}{Path to pml file}
 
 \item{script}{Vector of String with each element containing a line of command}
+
+\item{wait}{If true would wait for the pymol window to close}
 }
 \value{
 promt: pymol started

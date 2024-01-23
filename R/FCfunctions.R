@@ -75,18 +75,20 @@ pymolOpenFiles <- function(RA.files, pymol.dir, pml = '~/pymolBash.pml'){
 #' @param pymol.dir Path to pymol executable
 #' @param pml Path to pml file
 #' @param script Vector of String with each element containing a line of command
+#' @param wait If true would wait for the pymol window to close
 #' @return promt: pymol started
 #' @export
 run.pymol <- function(pymol.dir = '~/pyMOLWin.exe',
                       pml = 'pymolScript.pml',
-                      script){
+                      script,
+                      wait = FALSE){
   cat('#run pymol \n', file = pml, append = F)
   for(i in 1:length(script)){
     cat(script[i],' \n', sep = '', file = pml, append = T)
   }
   if(file.exists(pymol.dir)){
     cmd <- paste(pymol.dir, ' ', pml, sep = '')
-    system(cmd, wait = TRUE)
+    system(cmd, wait = wait)
     file.remove(pml)
     return('Pymol started')
   }else{
