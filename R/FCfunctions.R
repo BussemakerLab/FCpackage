@@ -78,7 +78,7 @@ pymolOpenFiles <- function(RA.files, pymol.dir, pml = '~/pymolBash.pml'){
 #' @return promt: pymol started
 #' @export
 run.pymol <- function(pymol.dir = '~/pyMOLWin.exe',
-                      pml = '~/pymolScript.pml',
+                      pml = 'pymolScript.pml',
                       script){
   cat('#run pymol \n', file = pml, append = F)
   for(i in 1:length(script)){
