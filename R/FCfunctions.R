@@ -87,11 +87,12 @@ run.pymol <- function(pymol.dir = '~/pyMOLWin.exe',
     cat(script[i],' \n', sep = '', file = pml, append = T)
   }
   if(file.exists(pymol.dir)){
-    cmd <- paste(pymol.dir, ' ', pml, sep = '')
+    cmd <- paste(pymol.dir, ' ', getwd(), '/',pml, sep = '')
     system(cmd, wait = wait)
-    file.remove(pml)
+
     return('Pymol started')
   }else{
+    file.remove(pml)
     warning('Pymol executable not found. Please download pymol from https://pymol.org/2/ and assign the full path to the pymol executable to the pymol.dir argument.')
   }
 
