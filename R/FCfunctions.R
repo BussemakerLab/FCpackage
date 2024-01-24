@@ -507,6 +507,8 @@ AAbpCombination <- function(mono_motifs, Alignment, AApos, motifPos){
 #' @return 3D Plotly plot
 #' @export
 plot_tetrahedron <- function(posMatrix, base_colors = c('green','blue','orange','red'), size = 5, axis = FALSE, label = F, color = F, vertex = F){
+  oldw <- getOption("warn")
+  options(warn = -1)
   JSON_matrix <- posMatrix
   if(color){
     resis <- unique(as.factor(colnames(JSON_matrix)))
@@ -608,7 +610,7 @@ plot_tetrahedron <- function(posMatrix, base_colors = c('green','blue','orange',
   if(!axis){
     plot3D <- plot3D%>%layout(scene = list(xaxis = axx, yaxis = axx, zaxis = axx))
   }
-
+  options(warn = oldw)
   return(plot3D)
 }
 
@@ -690,6 +692,8 @@ gene2pos <- function(motifs, pos = 'P1', nrow = 4){
 #' @return 3D Plotly plot
 #' @export
 plot_4Graph <- function(posMatrix, base_colors = c('green','blue','orange','red'), size = 5, label = F, color = F){
+  oldw <- getOption("warn")
+  options(warn = -1)
   JSON_matrix <- posMatrix
   if(color){
     resis <- unique(colnames(JSON_matrix))
@@ -927,6 +931,7 @@ plot_4Graph <- function(posMatrix, base_colors = c('green','blue','orange','red'
                          camera = list(eye = list(x = -1, y = -1, z = 1)),
                          aspectmode='cube'),
            showlegend = FALSE)
+  options(warn = oldw)
   return(plot4)
 }
 
