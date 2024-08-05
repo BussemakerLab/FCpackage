@@ -4,7 +4,7 @@
 \alias{predict.SVD}
 \title{Predict with SVD-regression model}
 \usage{
-\method{predict}{SVD}(object, Alignment, zero = 0.001, ...)
+\method{predict}{SVD}(object, Alignment, zero = 0.001, useSimilarAA = F, ...)
 }
 \arguments{
 \item{object}{SVD-regression model result from trainSVD()}
@@ -13,10 +13,12 @@
 
 \item{zero}{Lower limit to be assigned to predicted values}
 
+\item{useSimilarAA}{Use the weighted sum of similar AA when no matching AA is found in training data}
+
 \item{...}{Place holder for generic function}
 }
 \value{
-Matrix of binding motif models in feaquency measurements.
+Matrix of binding motif models in frequency measurements. attr('confidence') give confidence estimates of prediction
 }
 \description{
 Predict binding matrix with SVD-regression model

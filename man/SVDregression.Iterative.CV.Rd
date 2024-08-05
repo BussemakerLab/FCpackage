@@ -8,7 +8,9 @@ SVDregression.Iterative.CV(
   mono_motifs,
   Alignment,
   pos = "P-1",
-  Ftest_pVal = 0.1
+  Ftest_pVal = 0.001,
+  zero = 0.01,
+  useSimilarAA = F
 )
 }
 \arguments{
@@ -19,6 +21,10 @@ SVDregression.Iterative.CV(
 \item{pos}{Position of the binding matrix to predict.}
 
 \item{Ftest_pVal}{Threshold for F-test, only used when iterative is True.}
+
+\item{zero}{Lower limit to be assigned to predicted values}
+
+\item{useSimilarAA}{Use AA similarity assesment to fill unseen AAs}
 }
 \value{
 A data frame with two columns of true and predicted values

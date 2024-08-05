@@ -76,7 +76,7 @@ pymolOpenFiles <- function(RA.files, pymol.dir, pml = '~/pymolBash.pml'){
 #' @param pml Path to pml file
 #' @param script Vector of String with each element containing a line of command
 #' @param wait If true would wait for the pymol window to close
-#' @return promt: pymol started
+#' @return prompt: pymol started
 #' @export
 run.pymol <- function(pymol.dir = '~/pyMOLWin.exe',
                       pml = 'pymolScript.pml',
@@ -382,7 +382,7 @@ getPvalTable <- function(mono_motifs, Alignment, pos_index = c('P-3','P-2','P-1'
     ProteinPos <- data.frame(name = Alignment$name, pos = substr(Alignment$alignment,AApos,AApos))
     PosAA <- c()
     for(i in 1:length(mono_motifs)){
-      PosAA <- c(PosAA, ProteinPos[ProteinPos$name == mono_motifs[[i]]$name, 2])
+      PosAA <- c(PosAA, ProteinPos[ProteinPos$name == mono_motifs[[i]]$name, 2][1])
     }
     if(length(unique(PosAA)) == 1){
       addLine <- NA
@@ -465,9 +465,13 @@ matchAliMotif <- function(mono_motifs, Alignment, both = F){
     mono_motifs <- mono_motifs[-dele]
   }
   geneNames <- unlist(lapply(mono_motifs, function(x) x$name))
-  rownames(Alignment) <- Alignment$name
   out <- list()
-  out$alignment <- Alignment[geneNames,]
+  ali <- data.frame()
+  for(j in 1:length(geneNames)){
+    ali <- rbind.data.frame(ali, unlist(Alignment[Alignment$name == geneNames[j], ][1,]))
+  }
+  colnames(ali) <- c('name', 'alignment')
+  out$alignment <- ali
   out$motifs <- mono_motifs
   if(!both){
     return(out$alignment)
@@ -1010,7 +1014,7 @@ mononucleotide_logo <- function(matrix, type="energy", axes=TRUE, reverse=FALSE,
              ggplot2::geom_hline(yintercept = 0), alltheme)
 
       if (labels) {
-        plot <- plot + ggplot2::ylab(expression(paste(Delta, Delta, "G/RT")))
+        plot <- plot + ggplot2::ylab(expression(paste('-',Delta, Delta, "G/RT")))
       }
     }
 
@@ -1464,9 +1468,21 @@ trainSVD <- function(svd, Alignment, no.keyPos = c(), keyPos = c()){
   out$trainRMSD <- trainingRMSD
   out$trainPred <- reSvd
   out$uList <- uList
+  out$alignment <- Alignment
   class(out) <- 'SVD'
   return(out)
 }
+
+#' BLOSUM62
+#'
+#' protein substitution matrix BLOSUM62 used in svd prediction
+#'
+#' @name BLOSUM62
+#' @docType data
+#' @author H. Pagès and P. Aboyoun
+#' @references \url{https://web.mit.edu/~r/current/arch/i386_linux26/lib/R/library/Biostrings/html/substitution_matrices.html}
+#' @keywords imported BLOSUM62 matrix from K. Malde, The effect of sequence quality on sequence alignment, Bioinformatics, Feb 23, 2008.
+'BLOSUM62'
 
 #' Predict with SVD-regression model
 #'
@@ -1474,31 +1490,49 @@ trainSVD <- function(svd, Alignment, no.keyPos = c(), keyPos = c()){
 #' @param object SVD-regression model result from trainSVD()
 #' @param Alignment Alignment table with name and aligned sequences to be predicted
 #' @param zero Lower limit to be assigned to predicted values
+#' @param useSimilarAA Use the weighted sum of similar AA when no matching AA is found in training data
 #' @param ... Place holder for generic function
-#' @return Matrix of binding motif models in feaquency measurements.
+#' @return Matrix of binding motif models in frequency measurements. attr('confidence') give confidence estimates of prediction
 #' @export
-predict.SVD <- function(object, Alignment, zero = 0.001, ...){
+predict.SVD <- function(object, Alignment, zero = 0.001, useSimilarAA = F, ...){
   svdModel <- object
   if(length(svdModel$keyPos) != 3){
     print('Cannot perform tetrahedron transformation, number of PCs should be 3')
     return()
   }
   predList <- c()
+  confList <- c()
   for(ali in 1:nrow(Alignment)){
     synUtest <- list()
+    confidences <- list()
     for(i in 1:length(svdModel$keyPos)){
       addList <- c()
+      confidenceList <- c()
       for(j in svdModel$keyPos[[i]]){
         aa <- substr(Alignment$alignment[ali],j,j)
         uset <- svdModel$uList[[i]][[j]]
         add <- uset[uset$aa == aa, 2]
         if(length(add) == 0){
-          addList <- c(addList, 0)
+          if(!useSimilarAA){
+            addList <- c(addList, 0)
+            confidenceList <- c(confidenceList,0)
+          }else{
+            #weighted mean of uset, weighted by 1/(non-replacement blosum62 score - replacement blosum62 score)
+            sim <- BLOSUM62[aa,uset$aa]
+            max <- BLOSUM62[aa,aa]
+            sim <- 1/(max - sim)
+            add <- sum(uset$mean * sim) / sum(sim)
+            addList <- c(addList, add)
+            confidenceList <- c(confidenceList, max(sim)/max(table(substr(svdModel$alignment$alignment,j,j))))
+          }
+
         }else{
           addList <- c(addList, add)
+          confidenceList <- c(confidenceList, sum(substr(svdModel$alignment$alignment,j,j)==aa)/max(table(substr(svdModel$alignment$alignment,j,j))))
         }
       }
       synUtest[[i]] <- addList
+      confidences[[i]] <- confidenceList
     }
 
     predTest <- c()
@@ -1507,6 +1541,15 @@ predict.SVD <- function(object, Alignment, zero = 0.001, ...){
     }
     pred <- predTest %*% diag(svdModel$svd$d) %*% t(svdModel$svd$v)
     predList <- c(predList, pred)
+    #weighted sum for confidence sum of confidence * beta * d-vector
+    confidence <- 0
+    dev <- 0
+    for(i in 1:length(confidences)){
+      add <- sum(confidences[[i]] * svdModel$model[[i]][-1])# * svdModel$svd$d[i] / max(svdModel$svd$d))
+      dev <- dev + sum(svdModel$model[[i]][-1])
+      confidence <- sum(confidence, add)
+    }
+    confList <- c(confList, confidence/dev)
   }
   tetra_trans_matrix <- matrix(data = c(1,1,1,1,-1,-1,-1,1,-1,-1,-1,1), nrow = 4, ncol = 3, byrow = TRUE)
   pssm_trans_matrix <- MASS::ginv(tetra_trans_matrix)
@@ -1518,6 +1561,7 @@ predict.SVD <- function(object, Alignment, zero = 0.001, ...){
   predMatrix1[predMatrix1 < zero] <- zero
   colnames(predMatrix1) <- Alignment$name
   rownames(predMatrix1) <- c('A','C','G','T')
+  attr(predMatrix1,'confidence') <- confList
   return(predMatrix1)
 }
 
@@ -1528,9 +1572,10 @@ predict.SVD <- function(object, Alignment, zero = 0.001, ...){
 #' @param y Vector 2
 #' @param member number of member of each group
 #' @param mean If true, returns the mean of all groups; if false, returns a vector of each R-square value
+#' @param throughZero If true the regression line passes through zero
 #' @return Average R-square value
 #' @export
-groupedR2 <- function(x,y,member = 4, mean = T){
+groupedR2 <- function(x,y,member = length(x), mean = T, throughZero = T){
   group <- member
   if(length(x)!=length(y)){
     print('x and y have different length')
@@ -1545,12 +1590,19 @@ groupedR2 <- function(x,y,member = 4, mean = T){
   R2s <- c()
   for(i in 1:nrow(xM)){
     dt <- data.frame(xx = xM[i,], yy = yM[i,])
-    lm <- lm(yy~xx+0, dt)
+    if(throughZero){
+      lm <- lm(yy~xx+0, dt)
+    }else{
+      lm <- lm(yy~xx, dt)
+    }
+
     if(is.na(suppressWarnings(summary(lm)$r.squared))){
       add <- 0
     }
     add <- suppressWarnings(summary(lm)$r.squared)
-    if(lm$coefficients[1] <= 0){
+    if(length(lm$coefficients[1]) == 0){
+      add <- 0
+    }else if(lm$coefficients[1] <= 0){
       add <- 0
     }
     R2s <- c(R2s, add)
@@ -1576,6 +1628,7 @@ closestSeqPred <- function(mono_motifs, Alignment, pos = 'P-1'){
   alignment <- Alignment
   trueList <- c()
   predList <- c()
+  similarity <- c()
   for(i in 1:ncol(pos_matrix)){
     seq <- alignment$alignment[i]
     maxStr <- Inf
@@ -1589,10 +1642,11 @@ closestSeqPred <- function(mono_motifs, Alignment, pos = 'P-1'){
         }
       }
     }
+    similarity <- c(similarity, rep(maxStr,4))
     trueList <- c(trueList, unlist(data.frame(apply(log(as.data.frame(pos_matrix[,i])), 2, function(column) column - mean(column)))))
     predList <- c(predList, unlist(data.frame(apply(log(as.data.frame(pos_matrix[,predIndex])), 2, function(column) column - mean(column)))))
   }
-  out <- data.frame(true = trueList, pred = predList)
+  out <- data.frame(true = trueList, pred = predList, similarity = similarity)
   return(out)
 }
 
@@ -1716,12 +1770,13 @@ inspectFeatureSVD <- function(svd, Alignment){
 #' SVD-regression Cross-validation
 #'
 #' Leave-one-out cross-validation for SVD-regression model
-#' @param mono_motifs Motif samples to incldue in the CV test, result from loadMono_motifs().
+#' @param mono_motifs Motif samples to incldue in the CV test, result from loadMono_motifs() or filterMotifList().
 #' @param Alignment The alignment resulted from concatAli, ideally after matchAliMotif().
 #' @param pos Position of the binding matrix to predict.
+#' @param useSimilarAA Use AA similarity assesment to fill unseen AAs
 #' @return A data frame with two columns of true and predicted values
 #' @export
-SVDregression.CV <- function(mono_motifs, Alignment, pos = 'P-1'){
+SVDregression.CV <- function(mono_motifs, Alignment, pos = 'P-1', useSimilarAA = F){
   trainSVDModel <- trainSVD
   HDmotifs <- mono_motifs
   HDAlignment <- Alignment
@@ -1738,7 +1793,7 @@ SVDregression.CV <- function(mono_motifs, Alignment, pos = 'P-1'){
     svdModel <- trainSVDModel(svd, train_alignment)
     no.keyPos[t,] <- unlist(lapply(svdModel$keyPos,function(x) length(x)))
     #Predict binding motifs for test set
-    pred_motifs <- predict(svdModel, test_alignment, zero = 0.01)
+    pred_motifs <- predict(svdModel, test_alignment, zero = 0.01, useSimilarAA = useSimilarAA)
     #Comparing between true and predicted testing set motifs
     true <- frequency2ddG(gene2pos(test_motifs, pos = pos))
     pred <- frequency2ddG(pred_motifs)
@@ -1802,9 +1857,6 @@ trainSVD.Iterative <- function(svd, Alignment, Ftest_pVal = 0.1){
     sele[1:no.keyPos[i]] <- X1feature
     keyPos[[i]] <- sele
   }
-
-
-
   #average list
   uList <- list()
   for(i in 1:length(no.keyPos)){
@@ -1902,6 +1954,7 @@ trainSVD.Iterative <- function(svd, Alignment, Ftest_pVal = 0.1){
   out$trainRMSD <- trainingRMSD
   out$trainPred <- reSvd
   out$uList <- uList
+  out$alignment <- Alignment
   class(out) <- 'SVD'
   return(out)
 }
@@ -1913,9 +1966,11 @@ trainSVD.Iterative <- function(svd, Alignment, Ftest_pVal = 0.1){
 #' @param Alignment The alignment resulted from concatAli, ideally after matchAliMotif().
 #' @param pos Position of the binding matrix to predict.
 #' @param Ftest_pVal Threshold for F-test, only used when iterative is True.
+#' @param zero Lower limit to be assigned to predicted values
+#' @param useSimilarAA Use AA similarity assesment to fill unseen AAs
 #' @return A data frame with two columns of true and predicted values
 #' @export
-SVDregression.Iterative.CV <- function(mono_motifs, Alignment, pos = 'P-1', Ftest_pVal = 0.1){
+SVDregression.Iterative.CV <- function(mono_motifs, Alignment, pos = 'P-1', Ftest_pVal = 0.001, zero = 0.01, useSimilarAA = F){
 
   trainSVDModel <- trainSVD.Iterative
 
@@ -1924,6 +1979,7 @@ SVDregression.Iterative.CV <- function(mono_motifs, Alignment, pos = 'P-1', Ftes
   posM <- pos
   no.keyPos <- matrix(nrow = length(HDmotifs), ncol = 3, data = 0)
   predTrue <- data.frame(NULL)
+  confidences <- c()
   for(t in 1:length(HDmotifs)){
     train_motifs <- HDmotifs[-t]
     test_motifs <- HDmotifs[t]
@@ -1934,14 +1990,16 @@ SVDregression.Iterative.CV <- function(mono_motifs, Alignment, pos = 'P-1', Ftes
     svdModel <- trainSVDModel(svd, train_alignment, Ftest_pVal = Ftest_pVal)
     no.keyPos[t,] <- unlist(lapply(svdModel$keyPos,function(x) length(x)))
     #Predict binding motifs for test set
-    pred_motifs <- predict(svdModel, test_alignment, zero = 0.01)
+    pred_motifs <- predict(svdModel, test_alignment, zero = zero, useSimilarAA = useSimilarAA)
     #Comparing between true and predicted testing set motifs
     true <- frequency2ddG(gene2pos(test_motifs, pos = pos))
     pred <- frequency2ddG(pred_motifs)
     add <- data.frame(true = unlist(as.numeric(true)), pred = unlist(as.numeric(pred)))
     predTrue <- rbind.data.frame(predTrue, add)
+    confidences <- c(confidences, attr(pred_motifs,'confidence'))
   }
   attr(predTrue, 'no.keyPos') <- no.keyPos
+  attr(predTrue,'confidence') <- confidences
   return(predTrue)
 }
 
@@ -1956,4 +2014,540 @@ tetrahedron2matrix <- function(tetraMatrix){
   pssm_trans_matrix <- MASS::ginv(tetra_trans_matrix)
   predMatrix1 <- apply(t((tetraMatrix)%*%pssm_trans_matrix + 0.25), 2, function(x) x/max(x))
   return(predMatrix1)
+}
+
+#' Predict PSAM
+#'
+#' predict for multiple positions and output PSAM
+#' @param train_motifs motifs for training, result from loadMono_motifs()
+#' @param train_alignment alignment for training, result for matchAliMotif()
+#' @param predSeq sequences to predict, matching alignment of train_alignment
+#' @param pos positions to show in the PSAM
+#' @param zero Lower limit to be assigned to predicted values
+#' @param useSimilarAA Use the weighted sum of similar AA when no matching AA is found in training data
+#' @return A PSAM in frequency measruements
+#' @export
+SVDpredPSAM <- function(train_motifs, train_alignment, predSeq, pos = c('P-3','P-2','P-1','P1','P2','P3'), zero = 0.001, useSimilarAA = T){
+  test_alignment <- data.frame(name = 'Sample', alignment = predSeq)
+  PSAM <- matrix(nrow = 4, ncol = length(pos), data = 1)
+  rownames(PSAM) <- c('A', 'C', 'G','T')
+  colnames(PSAM) <- pos
+  for(p in 1:length(pos)){
+    thisPos <- pos[p]
+    svd <- matrixSVD(gene2pos(train_motifs, pos = thisPos))
+    svdModel <- trainSVD(svd, train_alignment)
+    #Predict binding motifs for test set
+    pred_motifs <- predict(svdModel, test_alignment, zero = zero, useSimilarAA = useSimilarAA)
+    PSAM[,p] <- pred_motifs
+  }
+  return(PSAM)
+}
+
+#' DNA
+#'
+#' DNA rownames
+#' @return DNA seq
+#' @export
+DNA <- function(){
+  return(c('A','C','G','T'))
+}
+
+#' Score Matrix Seed
+#'
+#' Score a motif matrix with a seed, the matrix and seed needs to be in the same length
+#' @param matrix motif matrix in frequency measurements
+#' @param seed seed matrix describing binding motif.
+#' @param weight numeric vector of weights of each motif position of the seed
+#' @return Minimum distance score
+#' @export
+scoreMatrixSeed <- function(matrix, seed, weight = c()){
+  matrix <- normalize_sum1(matrix, rows = F)
+  if(length(weight) == 0){
+    weight <- rep(1,ncol(seed))
+  }else if(length(weight) != ncol(seed)){
+    print('Weight length not matched')
+    return()
+  }
+  if(ncol(matrix) != ncol(seed)){
+    print('Matrix and Seed column number not matched')
+    return()
+  }
+  score <- 0
+  c <- 0
+  for(i in 1:ncol(seed)){
+    if(sum(seed[,i]) == 0){
+      next()
+    }
+    posScores <- c()
+    for(j in 1:nrow(seed)){
+      if(seed[j,i] != 0){
+        add <- (seed[j,i] - matrix[j,i])^2
+        posScores <- c(posScores,add)
+      }
+    }
+    score <- score + min(posScores)* weight[i]
+    c <- c+1
+  }
+  score <- (score/c)^(1/2)
+  return(score)
+}
+
+#' Score Motif Seed
+#'
+#' Score a motif matrix with a seed to find the position of a motif
+#' @param matrix motif matrix in frequency measurements
+#' @param seed seed matrix describing binding motif.
+#' @param weight numeric vector of weights of each motif position of the seed
+#' @return Minimum distance score and position
+#' @export
+scoreMotifSeed <- function(matrix, seed, weight = c()){
+  result <- c()
+  if(ncol(seed) > ncol(matrix)){
+    #print('seed longer than matrix')
+  }
+  scores <- c()
+  for(i in 1:(ncol(matrix)-ncol(seed)+1)){
+    subMatrix <- normalize_sum1(matrix[,i:(i+ncol(seed)-1)], rows = F)
+    scores <- c(scores, scoreMatrixSeed(subMatrix, seed, weight))
+  }
+  return(list(pos = which.min(scores), score = min(scores)))
+}
+
+#' Load From Index
+#'
+#' Load motif models in json format from a index form
+#' @param index data frame of model information, contain to columns: gene_symbol and study
+#' @param modelFile_Template dir of all model files, with specific identifier replaced as: $modelFile$
+#' @return List of all motif models
+#' @export
+loadFromIndex <- function(index, modelFile_Template){
+  len <- nrow(index)
+  addList <- c()
+  revList <- c()
+  n <- 0
+  for(i in 1:len){
+    tryCatch({
+      if(is.null(ncol(index))){
+        name <- index[i]
+      }else{
+        name <- paste0(index$gene_symbol[i], '_',index$study[i])
+      }
+      modelFile <- gsub("\\$modelFile\\$", name, modelFile_Template)
+      JSON_Lines <- readLines(modelFile)
+      loop <- TRUE
+      m <- 1
+      while(loop){
+        JSON_matrix <- tryCatch({
+          JSON2Matrix(JSON_Lines, mode = m)
+        }, error = function(x){return(c())}, warning = function(w){})
+        if(length(JSON_matrix) == 0){
+          loop <- FALSE
+        }else{
+          newEle <- list(gene_symbol = index$gene_symbol[i], study = index$study[i],
+                         mode = m, matrix = JSON_matrix)
+          addList[[length(addList)+1]] <- newEle
+          revMotif <- JSON_matrix[nrow(JSON_matrix):1,ncol(JSON_matrix):1]
+          rownames(revMotif) <- DNA()
+          revEle <- list(gene_symbol = index$gene_symbol[i], study = index$study[i],
+                         mode = -m, matrix = revMotif)
+          addList[[length(addList)+1]] <- revEle
+          m <- m+1
+        }
+      }
+    },error = function(e){return(paste0('Error in ', i))})
+  }
+  return(addList)
+}
+
+
+#' Score Motif List
+#'
+#' Score a List of motifs
+#' @param motifList List of motifs, results from loadFromIndex(), list of lists, each elements needs to have 'gene_symbol', 'study', 'mode', 'matrix'
+#' @param seed seed matrix describing binding motif.
+#' @param weight numeric vector of weights of each motif position of the seed
+#' @return List of all motif models
+#' @export
+scoreMotifList <- function(motifList, seed, weight = c()){
+  addList <- motifList
+  motifsInfo <- data.frame(NULL)
+  for(i in 1:length(addList)){
+    tryCatch({
+      score <- scoreMotifSeed(addList[[i]]$matrix, seed)
+      addLine <- c(gene_symbol = addList[[i]]$gene_symbol, study = addList[[i]]$study,
+                   mode = addList[[i]]$mode, score = score$score, pos = score$pos, id = i)
+      motifsInfo <- rbind.data.frame(motifsInfo, addLine)
+    },error = function(e){return(paste0('Error in ', i))})
+  }
+  colnames(motifsInfo) <- c('gene_symbol', 'study', 'mode', 'score', 'pos', 'id')
+  return(motifsInfo)
+}
+
+#' Filter Motif List
+#'
+#' Filter from all motifs list for motifs according to a index data frame.
+#' @param index filtered result for scoreMotifList()
+#' @param motifList List of motifs, results from loadFromIndex(), used in scoreMotifList()
+#' @param length length of motif alignment seed
+#' @param posNames name of each motif position
+#' @return List of filtered motif models (frequency measurements) according to index
+#' @export
+filterMotifList <- function(index, motifList, length = 8, posNames=paste0('P',1:length)){
+  out <- list()
+  for(i in 1:nrow(index)){
+    mono <- motifList[[as.numeric(index$id[i])]]$matrix[,index$pos[i]:(as.numeric(index$pos[i])+length-1)]
+    mono <- frequency2ddG(mono)
+    mono <- ddG2frequency(mono)
+    colnames(mono) <- posNames
+    add <- list()
+    add$name <- index$gene_symbol[i]
+    add$matrix <- mono
+    out[[i]] <- add
+  }
+  return(out)
+}
+
+#' Plot Prediction vs. True
+#'
+#' Make scatter plot between predicted and true value of motif prediction at a position
+#' @param predTrue data frame with 2 columns true and pred, result from getBaseLineAccuracy(), closestSeqPred(), or SVDregression.Iterative.CV()
+#' @param xlab x axis label
+#' @param ylab y axis label
+#' @param main plot title
+#' @param xlim x axis limits
+#' @param ylim y axis limits
+#' @param throughZero If true the regression line passes through zero
+#' @return Scatter plot showing prediction accuracy
+#' @export
+plotPredTrue <- function(predTrue, xlab = 'Experimental -ΔΔG/RT', ylab = 'Predicted -ΔΔG/RT',
+                         main = 'prediction',xlim = c(1.05*min(predTrue$true),1.05*max(predTrue$true)),
+                         ylim = c(1.05*min(predTrue$pred),1.05*max(predTrue$pred)),
+                         throughZero = T){
+  plot(predTrue$true,predTrue$pred, pch = 19, xlab = xlab, ylab = ylab, main = main, col = c('green','blue','orange','red'), xlim = xlim, ylim = ylim, cex = 1, cex.lab = 1.2, cex.axis = 1.2)
+  if(throughZero){
+    abline(lm(pred~true+0, predTrue), col = '#666666', lty = 2)
+  }else{
+    abline(lm(pred~true, predTrue), col = '#666666', lty = 2)
+  }
+  legend( x = "bottomright", legend = c('A', 'C', 'G', 'T'), col =c('green','blue','orange','red'), pch = 19, bty='n')
+  legend('topleft', paste0('R^2 = ', round(groupedR2(predTrue$pred, predTrue$true, nrow(predTrue), throughZero=throughZero),4), '\n',
+                           'RMSD = ', round(RMSD(predTrue$pred,predTrue$true),4)), bty = 'n')
+}
+
+#' make SVD model
+#'
+#' Make prediction of entire motif
+#' @param mono_motifs Motif samples to incldue in the model, result from loadMono_motifs() or filterMotifList().
+#' @param Alignment The alignment resulted from concatAli, ideally after matchAliMotif().
+#' @param Positions positions to train the model for
+#' @param Ftest_pVal threshold used for F-test
+#' @return SVD regression model for entire motif
+#' @export
+makeSVDModel <- function(mono_motifs, Alignment,
+                         Positions,
+                         Ftest_pVal = 0.001){
+  train_motifs <- mono_motifs
+  train_alignment <- Alignment
+  svdModel <- list()
+  for(i in 1:length(Positions)){
+    svd <- matrixSVD(gene2pos(train_motifs, pos = Positions[i]))
+    svdModel[[Positions[i]]] <- trainSVD.Iterative(svd, train_alignment, Ftest_pVal = Ftest_pVal)
+  }
+  return(svdModel)
+}
+
+#' Predict PSAM with SVD model
+#'
+#' predict for multiple positions and output PSAM with pre-trained SVDmodel
+#' @param SVDmodel pre-trained SVDmodel from makeSVDModel()
+#' @param predSeq sequences to predict, matching alignment of train_alignment
+#' @param pos positions to show in the PSAM
+#' @param zero Lower limit to be assigned to predicted values
+#' @return A PSAM in frequency measurements
+#' @export
+SVDmodelPredPSAM <- function(SVDmodel, predSeq, zero = 0.001){
+  pos <- names(SVDmodel)
+  test_alignment <- data.frame(name = 'Sample', alignment = predSeq)
+  PSAM <- matrix(nrow = 4, ncol = length(pos), data = 1)
+  rownames(PSAM) <- c('A', 'C', 'G','T')
+  colnames(PSAM) <- pos
+  for(p in 1:length(pos)){
+    thisPos <- pos[p]
+    #Predict binding motifs for test set
+    pred_motifs <- predict(SVDmodel[[thisPos]], test_alignment, zero = zero)
+    PSAM[,p] <- pred_motifs
+  }
+  return(PSAM)
+}
+
+#' predTrue ddG to frequency
+#'
+#' Change output of SVDregression.Iterative.CV() from ddG measurements to frequency measurements
+#' @param predTrue predTrue table, output of SVDregression.Iterative.CV()
+#' @param PFM If true, will output PFM (column sum = 1) instead of PSAM(column max = 1)
+#' @return predTrue table
+#' @export
+predTrue.ddG2frequency <- function(predTrue, PFM = F){
+  BaseLines <- predTrue
+  colnames(BaseLines) <- c('true','pred')
+  TrueMatrix <- matrix(ncol = nrow(BaseLines)/4, nrow = 4, data = BaseLines$true, byrow = F)
+  PredMatrix <- matrix(ncol = nrow(BaseLines)/4, nrow = 4, data = BaseLines$pred, byrow = F)
+  TrueMatrix <- ddG2frequency(TrueMatrix)
+  PredMatrix <- ddG2frequency(PredMatrix)
+  if(PFM){
+    TrueMatrix <- apply(TrueMatrix, 2, function(x) x = x/sum(x))
+    PredMatrix <- apply(PredMatrix, 2, function(x) x = x/sum(x))
+  }
+  out <- data.frame(true = as.numeric(TrueMatrix),pred = as.numeric(PredMatrix))
+  return(out)
+}
+
+#' Similarity Regression Distance
+#'
+#' Calculate distance of similarity regression
+#' @param seq1 Sequence 1
+#' @param seq2 Sequence 2
+#' @param weight pretrained weights for SR
+#' @return sequence distance
+#' @export
+SRdist <- function(seq1, seq2, weight){
+  ID <- c()
+  for(i in 1:nchar(seq1)){
+    if(substr(seq1,i,i) == substr(seq2,i,i)){
+      ID <- c(ID, 1)
+    }else{
+      ID <- c(ID, 0)
+    }
+  }
+  return(-sum(ID * weight))
+}
+
+#' Similarity Regression Prediction
+#'
+#' Predict motif model with Similarity regression
+#' @param mono_motifs Motif samples to incldue in the model, result from loadMono_motifs() or filterMotifList().
+#' @param Alignment The alignment resulted from concatAli, ideally after matchAliMotif().
+#' @param pos positions to show in the PSAM
+#' @param weightfile json file that contains pretrained weights from Lamber et. al.,
+#' @return predTrue data frame
+#' @export
+SRpred <- function(mono_motifs, Alignment, pos, weightfile){
+  weights <- RJSONIO::fromJSON(paste(readLines(weightfile), collapse = ''))
+  weights <- weights$SR.Weights
+  if(length(weights) != nchar(Alignment$alignment[1])){
+    print('model and data not the same length')
+  }
+
+  pos_matrix <- gene2pos(mono_motifs, pos = pos)
+  alignment <- Alignment
+  trueList <- c()
+  predList <- c()
+  similarity <- c()
+  for(i in 1:ncol(pos_matrix)){
+    seq <- alignment$alignment[i]
+    maxStr <- Inf
+    predIndex <- 0
+    for(j in 1:ncol(pos_matrix)){
+      if(j != i){
+        Str <- SRdist(seq, alignment$alignment[j], weights)
+        if(Str < maxStr){
+          maxStr <- Str
+          predIndex <- j
+        }
+      }
+    }
+    similarity <- c(similarity, rep(maxStr,4))
+    trueList <- c(trueList, unlist(data.frame(apply(log(as.data.frame(pos_matrix[,i])), 2, function(column) column - mean(column)))))
+    predList <- c(predList, unlist(data.frame(apply(log(as.data.frame(pos_matrix[,predIndex])), 2, function(column) column - mean(column)))))
+  }
+  out <- data.frame(true = trueList, pred = predList, similarity = similarity)
+  return(out)
+}
+
+#' make predictions with Similarity Regression
+#'
+#' Predict motif model with Similarity regression
+#' @param predSeq sequences to predict, matching alignment of train_alignment
+#' @param mono_motifs Motif samples to incldue in the model, result from loadMono_motifs() or filterMotifList().
+#' @param Alignment The alignment resulted from concatAli, ideally after matchAliMotif().
+#' @param weightfile json file that contains pretrained weights from Lamber et. al.,
+#' @return predTrue data frame
+#' @export
+SRpredPSAM <- function(predSeq, mono_motifs, Alignment, weightfile){
+  weights <- RJSONIO::fromJSON(paste(readLines(weightfile), collapse = ''))
+  weights <- weights$SR.Weights
+  if(length(weights) != nchar(Alignment$alignment[1])){
+    print('model and data not the same length')
+  }
+  predList <- list()
+  similarity <- c()
+  source <- c()
+  for(i in 1:nrow(predSeq)){
+    seq <- predSeq$alignment[i]
+    maxStr <- Inf
+    predIndex <- 0
+    for(j in 1:nrow(Alignment)){
+      Str <- SRdist(seq, Alignment$alignment[j], weights)
+      if(Str < maxStr){
+        maxStr <- Str
+        predIndex <- j
+      }
+    }
+    similarity <- c(similarity, maxStr)
+    source <- c(source, mono_motifs[[predIndex]]$name)
+    add <- list()
+    add$name <- predSeq$name[i]
+    add$matrix <- mono_motifs[[predIndex]]$matrix
+    predList[[i]] <- add
+  }
+  attr(predList, 'similarity') <- similarity
+  attr(predList, 'source') <- source
+  return(predList)
+}
+
+#' make predictions with Closest sequence
+#'
+#' Predict motif model with Closest sequence
+#' @param predSeq sequences to predict, matching alignment of train_alignment
+#' @param mono_motifs Motif samples to include in the model, result from loadMono_motifs() or filterMotifList().
+#' @param Alignment The alignment resulted from concatAli, ideally after matchAliMotif().
+#' @return predTrue data frame
+#' @export
+CSpredPSAM <- function(predSeq, mono_motifs, Alignment){
+  predList <- list()
+  similarity <- c()
+  source <- c()
+  for(i in 1:nrow(predSeq)){
+    seq <- predSeq$alignment[i]
+    maxStr <- Inf
+    predIndex <- 0
+    for(j in 1:nrow(Alignment)){
+      Str <- stringdist::stringdist(seq, Alignment$alignment[j])
+      if(Str < maxStr){
+        maxStr <- Str
+        predIndex <- j
+      }
+    }
+    similarity <- c(similarity, maxStr)
+    source <- c(source, mono_motifs[[predIndex]]$name)
+    add <- list()
+    add$name <- predSeq$name[i]
+    add$matrix <- mono_motifs[[predIndex]]$matrix
+    predList[[i]] <- add
+  }
+  attr(predList, 'similarity') <- similarity
+  attr(predList, 'source') <- source
+  return(predList)
+}
+
+#' make Amino Acid classification
+#'
+#' Classify AA according to biophysical properties
+#' @param AAs A vector of amino acid in 1 letter code.
+#' @return Vector of classification with attribute 'encode' encoding proprieties
+#' @export
+AAclassify <- function(AAs){
+  props <- c()
+  encodes <- c()
+  for(i in 1:length(AAs)){
+    AA <- AAs[i]
+    H <- AAfeatures()[AA,'Hydropathy']
+    E <- AAfeatures()[AA,'PI']
+    if(AA == 'F'){
+      prop <- 'aromatic'
+      encode <- -100
+    }else if(AA == 'Y'){
+      prop <- 'aromatic'
+      encode <- 100
+    }else if(H > -0.6){
+      prop <- 'non-polar'
+      encode <- -10
+    }else if(E > 7.6){
+      prop <- 'positive'
+      encode <- 1
+    }else if(E < 4) {
+      prop <- 'negative'
+      encode <- -1
+    }else{
+      prop <- 'polar'
+      encode <- 0
+    }
+    props <- c(props, prop)
+    encodes <- c(encodes, encode)
+  }
+  attr(props, 'encode') <- encodes
+  return(props)
+}
+
+#' Classify AA-AA interaction
+#'
+#' Classify AA-AA interaction according to AA propaties.
+#' @param prop1s A vector of amino acid proprieties, atrribute 'encode' of AAclassify() output.
+#' @param prop2s A vector of amino acid proprieties, atrribute 'encode' of AAclassify() output.
+#' @return Vector of interaction classification
+#' @export
+AAinteraction <- function(prop1s, prop2s){
+  outList <- c()
+  for(i in 1:length(prop1s)){
+    prop1 <- prop1s[i]
+    prop2 <- prop2s[i]
+    if(prop1 == prop2 && prop1 == 0){
+      interaction <- 'h-bond'
+    }else if (abs(prop1) + abs(prop2) == 200){
+      interaction <- 'Pi-stacking'
+    }else if ((prop1 + prop2) == -20 || (prop1 + prop2) == -110){
+      interaction <- 'hydrophobic'
+    }else if ((prop1 + prop2) == 0){
+      interaction <- 'electro-static'
+    }else if (abs(prop1 + prop2) < 2){
+      interaction <- 'h-bond'
+    }else if (abs(prop1 + prop2) < 3){
+      interaction <- 'repel'
+    }else if (prop1 + prop2 > 90){
+      interaction <- 'h-bond'
+    }else{
+      interaction <- 'repel'
+    }
+    outList <- c(outList, interaction)
+  }
+  return(outList)
+}
+
+#' load motif from json
+#'
+#' Load mono motif from JSON
+#' @param modelFile json file with consensus motif
+#' @param gene gene symbol of the motif
+#' @param study study of the motif
+#' @return list of motifs in the json file forward and backward
+#' @export
+loadJSONmotif <- function(modelFile, gene = 'sampleGene', study = 'NA'){
+  JSON_Lines <- readLines(modelFile)
+  loop <- TRUE
+  m <- 1
+  addList <- list()
+  while (loop) {
+    JSON_matrix <- tryCatch({
+      JSON2Matrix(JSON_Lines, mode = m)
+    }, error = function(x) {
+      return(c())
+    }, warning = function(w) {
+    })
+    if (length(JSON_matrix) == 0) {
+      loop <- FALSE
+    }
+    else {
+      newEle <- list(gene_symbol = gene,
+                     study = study, mode = m, matrix = JSON_matrix)
+      addList[[length(addList) + 1]] <- newEle
+      revMotif <- JSON_matrix[nrow(JSON_matrix):1,
+                              ncol(JSON_matrix):1]
+      rownames(revMotif) <- DNA()
+      revEle <- list(gene_symbol = gene,
+                     study = study, mode = -m, matrix = revMotif)
+      addList[[length(addList) + 1]] <- revEle
+      m <- m + 1
+    }
+  }
+  return(addList)
 }

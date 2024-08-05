@@ -4,14 +4,16 @@
 \alias{SVDregression.CV}
 \title{SVD-regression Cross-validation}
 \usage{
-SVDregression.CV(mono_motifs, Alignment, pos = "P-1")
+SVDregression.CV(mono_motifs, Alignment, pos = "P-1", useSimilarAA = F)
 }
 \arguments{
-\item{mono_motifs}{Motif samples to incldue in the CV test, result from loadMono_motifs().}
+\item{mono_motifs}{Motif samples to incldue in the CV test, result from loadMono_motifs() or filterMotifList().}
 
 \item{Alignment}{The alignment resulted from concatAli, ideally after matchAliMotif().}
 
 \item{pos}{Position of the binding matrix to predict.}
+
+\item{useSimilarAA}{Use AA similarity assesment to fill unseen AAs}
 }
 \value{
 A data frame with two columns of true and predicted values

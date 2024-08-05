@@ -4,7 +4,7 @@
 \alias{groupedR2}
 \title{Grouped R-square}
 \usage{
-groupedR2(x, y, member = 4, mean = T)
+groupedR2(x, y, member = length(x), mean = T, throughZero = T)
 }
 \arguments{
 \item{x}{Vector 1}
@@ -14,6 +14,8 @@ groupedR2(x, y, member = 4, mean = T)
 \item{member}{number of member of each group}
 
 \item{mean}{If true, returns the mean of all groups; if false, returns a vector of each R-square value}
+
+\item{throughZero}{If true the regression line passes through zero}
 }
 \value{
 Average R-square value

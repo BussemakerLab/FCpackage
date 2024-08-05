@@ -21,7 +21,7 @@ run.pymol(
 \item{wait}{If true would wait for the pymol window to close}
 }
 \value{
-promt: pymol started
+prompt: pymol started
 }
 \description{
 Run pymol commands from R
