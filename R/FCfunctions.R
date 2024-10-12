@@ -438,7 +438,7 @@ AAcolor <- function(AAs){
                '#66cc66',
                '#000000',
                '#006600',
-               '#FEFEFE'
+               '#EEEEEE'
                )
   names(colors) <- AA
   return(colors[AAs])
@@ -1545,7 +1545,7 @@ predict.SVD <- function(object, Alignment, zero = 0.001, useSimilarAA = F, ...){
     confidence <- 0
     dev <- 0
     for(i in 1:length(confidences)){
-      add <- sum(confidences[[i]] * svdModel$model[[i]][-1])# * svdModel$svd$d[i] / max(svdModel$svd$d))
+      add <- sum(confidences[[i]] * abs(svdModel$model[[i]][-1]))# * svdModel$svd$d[i] / max(svdModel$svd$d))
       dev <- dev + sum(svdModel$model[[i]][-1])
       confidence <- sum(confidence, add)
     }
