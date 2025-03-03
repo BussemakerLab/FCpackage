@@ -1,7 +1,7 @@
 Package: FamilyCode
 Type: Package
 Title: R Package For Family Code Framework
-Version: 0.1.41
+Version: 0.1.44
 Author: Shaoxun Liu
 Maintainer: Shaoxun Liu <sl4970@columbia.edu>
 Description: 
@@ -12,7 +12,7 @@ Description:
 License: Artistic-2.0
 Encoding: UTF-8
 LazyData: true
-RoxygenNote: 7.3.1
+RoxygenNote: 7.3.2
 Imports:
   dplyr,
   plotly,

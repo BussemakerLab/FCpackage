@@ -4,7 +4,7 @@
 \alias{predict.SVD}
 \title{Predict with SVD-regression model}
 \usage{
-\method{predict}{SVD}(object, Alignment, zero = 0.001, useSimilarAA = F, ...)
+\method{predict}{SVD}(object, Alignment, zero = 0.01, useSimilarAA = F, ...)
 }
 \arguments{
 \item{object}{SVD-regression model result from trainSVD()}

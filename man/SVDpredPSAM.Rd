@@ -9,7 +9,7 @@ SVDpredPSAM(
   train_alignment,
   predSeq,
   pos = c("P-3", "P-2", "P-1", "P1", "P2", "P3"),
-  zero = 0.001,
+  zero = 0.01,
   useSimilarAA = T
 )
 }

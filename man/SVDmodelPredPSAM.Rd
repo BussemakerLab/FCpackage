@@ -4,12 +4,12 @@
 \alias{SVDmodelPredPSAM}
 \title{Predict PSAM with SVD model}
 \usage{
-SVDmodelPredPSAM(SVDmodel, predSeq, zero = 0.001)
+SVDmodelPredPSAM(SVDmodel, predSeq, zero = 0.01)
 }
 \arguments{
 \item{SVDmodel}{pre-trained SVDmodel from makeSVDModel()}
 
-\item{predSeq}{sequences to predict, matching alignment of train_alignment}
+\item{predSeq}{sequence to predict, matching alignment of train_alignment}
 
 \item{zero}{Lower limit to be assigned to predicted values}
 

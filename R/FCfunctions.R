@@ -1494,7 +1494,7 @@ trainSVD <- function(svd, Alignment, no.keyPos = c(), keyPos = c()){
 #' @param ... Place holder for generic function
 #' @return Matrix of binding motif models in frequency measurements. attr('confidence') give confidence estimates of prediction
 #' @export
-predict.SVD <- function(object, Alignment, zero = 0.001, useSimilarAA = F, ...){
+predict.SVD <- function(object, Alignment, zero = 0.01, useSimilarAA = F, ...){
   svdModel <- object
   if(length(svdModel$keyPos) != 3){
     print('Cannot perform tetrahedron transformation, number of PCs should be 3')
@@ -1517,13 +1517,18 @@ predict.SVD <- function(object, Alignment, zero = 0.001, useSimilarAA = F, ...){
             addList <- c(addList, 0)
             confidenceList <- c(confidenceList,0)
           }else{
-            #weighted mean of uset, weighted by 1/(non-replacement blosum62 score - replacement blosum62 score)
-            sim <- BLOSUM62[aa,uset$aa]
-            max <- BLOSUM62[aa,aa]
-            sim <- 1/(max - sim)
-            add <- sum(uset$mean * sim) / sum(sim)
-            addList <- c(addList, add)
-            confidenceList <- c(confidenceList, max(sim)/max(table(substr(svdModel$alignment$alignment,j,j))))
+            if(aa == '-'){
+              addList <- c(addList, 0)
+              confidenceList <- c(confidenceList,0)
+            }else{
+              #weighted mean of uset, weighted by 1/(non-replacement blosum62 score - replacement blosum62 score)
+              sim <- BLOSUM62[aa,uset$aa]
+              max <- BLOSUM62[aa,aa]
+              sim <- 1/(max - sim)
+              add <- sum(uset$mean * sim) / sum(sim)
+              addList <- c(addList, add)
+              confidenceList <- c(confidenceList, max(sim)/max(table(substr(svdModel$alignment$alignment,j,j))))
+            }
           }
 
         }else{
@@ -1595,15 +1600,18 @@ groupedR2 <- function(x,y,member = length(x), mean = T, throughZero = T){
     }else{
       lm <- lm(yy~xx, dt)
     }
-
+    add <- suppressWarnings(summary(lm)$r.squared)
     if(is.na(suppressWarnings(summary(lm)$r.squared))){
       add <- 0
     }
-    add <- suppressWarnings(summary(lm)$r.squared)
-    if(length(lm$coefficients[1]) == 0){
-      add <- 0
-    }else if(lm$coefficients[1] <= 0){
-      add <- 0
+    if(add != 0){
+      if(length(lm$coefficients[1]) == 0){
+        add <- 0
+      }else if(throughZero && lm$coefficients[1] <= 0){
+        add <- 0
+      }else if (!throughZero && lm$coefficients[2] <= 0){
+        add <- 0
+      }
     }
     R2s <- c(R2s, add)
   }
@@ -1615,6 +1623,39 @@ groupedR2 <- function(x,y,member = length(x), mean = T, throughZero = T){
 
 }
 
+#' Grouped PCC
+#'
+#' Find average PCC value for two vectors separated in to groups with multiple members
+#' @param x Vector 1
+#' @param y Vector 2
+#' @param member number of member of each group
+#' @param mean If true, returns the mean of all groups; if false, returns a vector of each R-square value
+#' @return Average R-square value
+#' @export
+groupedPCC <- function(x,y,member = length(x), mean = T){
+  group <- member
+  if(length(x)!=length(y)){
+    print('x and y have different length')
+    return()
+  }
+  if(length(x)%%group != 0){
+    print('Cannot be devided evenly by group number')
+    return()
+  }
+  xM <- matrix(nrow = length(x)/group, ncol = group, data = x, byrow = T)
+  yM <- matrix(nrow = length(y)/group, ncol = group, data = y, byrow = T)
+  R2s <- c()
+  for(i in 1:nrow(xM)){
+    add <- cor(xM[i,],yM[i,])
+    R2s <- c(R2s, add)
+  }
+  if(mean){
+    return(mean(R2s))
+  }else{
+    return(R2s)
+  }
+
+}
 #' Closest sequence prediction
 #'
 #' Use the Closest sequence prediction method (Weirauch, 2014) to predict the binding matrix
@@ -1791,6 +1832,44 @@ SVDregression.CV <- function(mono_motifs, Alignment, pos = 'P-1', useSimilarAA =
     #Train svd-regression model
     svd <- matrixSVD(gene2pos(train_motifs, pos = pos))
     svdModel <- trainSVDModel(svd, train_alignment)
+    no.keyPos[t,] <- unlist(lapply(svdModel$keyPos,function(x) length(x)))
+    #Predict binding motifs for test set
+    pred_motifs <- predict(svdModel, test_alignment, zero = 0.01, useSimilarAA = useSimilarAA)
+    #Comparing between true and predicted testing set motifs
+    true <- frequency2ddG(gene2pos(test_motifs, pos = pos))
+    pred <- frequency2ddG(pred_motifs)
+    add <- data.frame(true = unlist(as.numeric(true)), pred = unlist(as.numeric(pred)))
+    predTrue <- rbind.data.frame(predTrue, add)
+  }
+  attr(predTrue, 'no.keyPos') <- no.keyPos
+  return(predTrue)
+}
+
+#' SVD-regression Cross-validation with fixed features
+#'
+#' Leave-one-out cross-validation for SVD-regression model with fixed features
+#' @param mono_motifs Motif samples to incldue in the CV test, result from loadMono_motifs() or filterMotifList().
+#' @param Alignment The alignment resulted from concatAli, ideally after matchAliMotif().
+#' @param pos Position of the binding matrix to predict.
+#' @param useSimilarAA Use AA similarity assesment to fill unseen AAs
+#' @param keyPos A list of key positions to use for prediction
+#' @return A data frame with two columns of true and predicted values
+#' @export
+SVDregression.Fixed.CV <- function(mono_motifs, Alignment, pos = 'P-1', useSimilarAA = F, keyPos = c()){
+  trainSVDModel <- trainSVD
+  HDmotifs <- mono_motifs
+  HDAlignment <- Alignment
+  posM <- pos
+  no.keyPos <- matrix(nrow = length(HDmotifs), ncol = 3, data = 0)
+  predTrue <- data.frame(NULL)
+  for(t in 1:length(HDmotifs)){
+    train_motifs <- HDmotifs[-t]
+    test_motifs <- HDmotifs[t]
+    train_alignment <- matchAliMotif(train_motifs, HDAlignment, both = T)$alignment
+    test_alignment <- matchAliMotif(test_motifs, HDAlignment, both = T)$alignment
+    #Train svd-regression model
+    svd <- matrixSVD(gene2pos(train_motifs, pos = pos))
+    svdModel <- trainSVDModel(svd, train_alignment, keyPos = keyPos)
     no.keyPos[t,] <- unlist(lapply(svdModel$keyPos,function(x) length(x)))
     #Predict binding motifs for test set
     pred_motifs <- predict(svdModel, test_alignment, zero = 0.01, useSimilarAA = useSimilarAA)
@@ -2027,7 +2106,7 @@ tetrahedron2matrix <- function(tetraMatrix){
 #' @param useSimilarAA Use the weighted sum of similar AA when no matching AA is found in training data
 #' @return A PSAM in frequency measruements
 #' @export
-SVDpredPSAM <- function(train_motifs, train_alignment, predSeq, pos = c('P-3','P-2','P-1','P1','P2','P3'), zero = 0.001, useSimilarAA = T){
+SVDpredPSAM <- function(train_motifs, train_alignment, predSeq, pos = c('P-3','P-2','P-1','P1','P2','P3'), zero = 0.01, useSimilarAA = T){
   test_alignment <- data.frame(name = 'Sample', alignment = predSeq)
   PSAM <- matrix(nrow = 4, ncol = length(pos), data = 1)
   rownames(PSAM) <- c('A', 'C', 'G','T')
@@ -2256,16 +2335,38 @@ makeSVDModel <- function(mono_motifs, Alignment,
   return(svdModel)
 }
 
+#' make SVD model.single mutation
+#'
+#' Make prediction of entire motif for single mutation
+#' @param mono_motifs Motif samples to incldue in the model, result from loadMono_motifs() or filterMotifList().
+#' @param Alignment The alignment resulted from concatAli, ideally after matchAliMotif().
+#' @param Positions positions to train the model for
+#' @param mutation positions in the alignment where the mutation is seen
+#' @return SVD regression model for entire motif
+#' @export
+makeSVDModel.singleMutation <- function(mono_motifs, Alignment,
+                         Positions, mutation){
+  train_motifs <- mono_motifs
+  train_alignment <- Alignment
+  svdModel <- list()
+  for(i in 1:length(Positions)){
+    svd <- matrixSVD(gene2pos(train_motifs, pos = Positions[i]))
+    svdModel[[Positions[i]]] <- trainSVD(svd, train_alignment,  no.keyPos = c(1,1,1), keyPos = list(c(mutation), c(mutation), c(mutation)))
+  }
+  return(svdModel)
+}
+
+
 #' Predict PSAM with SVD model
 #'
 #' predict for multiple positions and output PSAM with pre-trained SVDmodel
 #' @param SVDmodel pre-trained SVDmodel from makeSVDModel()
-#' @param predSeq sequences to predict, matching alignment of train_alignment
+#' @param predSeq sequence to predict, matching alignment of train_alignment
 #' @param pos positions to show in the PSAM
 #' @param zero Lower limit to be assigned to predicted values
 #' @return A PSAM in frequency measurements
 #' @export
-SVDmodelPredPSAM <- function(SVDmodel, predSeq, zero = 0.001){
+SVDmodelPredPSAM <- function(SVDmodel, predSeq, zero = 0.01){
   pos <- names(SVDmodel)
   test_alignment <- data.frame(name = 'Sample', alignment = predSeq)
   PSAM <- matrix(nrow = 4, ncol = length(pos), data = 1)
@@ -2295,6 +2396,7 @@ predTrue.ddG2frequency <- function(predTrue, PFM = F){
   TrueMatrix <- ddG2frequency(TrueMatrix)
   PredMatrix <- ddG2frequency(PredMatrix)
   if(PFM){
+
     TrueMatrix <- apply(TrueMatrix, 2, function(x) x = x/sum(x))
     PredMatrix <- apply(PredMatrix, 2, function(x) x = x/sum(x))
   }
@@ -2551,3 +2653,149 @@ loadJSONmotif <- function(modelFile, gene = 'sampleGene', study = 'NA'){
   }
   return(addList)
 }
+
+#' Score kmer
+#'
+#' Score kmer probes with motif model
+#' @param kmers List of kmers
+#' @param motif motif model
+#' @param lflank left flank added to the probe
+#' @param rflank right flank added to the probe
+#' @param maxZero rescale ddG values to maximize at 0 or center at 0
+#' @param additive frequency or minimum energy
+#' @param reverseComplement Score both forward and reverse complement
+#' @return Energy measurement for kmers
+#' @export
+Scorekmer <- function(kmers, motif, lflank = '', rflank = '', maxZero = T, additive = F, reverseComplement = T){
+  if(maxZero){
+    motif <- apply(motif,2,function(x) x-max(x))
+  }else{
+    motif <- apply(motif,2,function(x) x-mean(x))
+  }
+
+  revMotif <- motif[4:1,ncol(motif):1]
+  row.names(revMotif) <- DNA()
+  scores <- c()
+  for(i in 1:length(kmers)){
+    frameEnergies <- c()
+    seqAll <- paste0(lflank, kmers[i], rflank)
+    for(frame in 0:(nchar(seqAll) - ncol(motif))){
+      seq <- substr(seqAll, 1+frame, ncol(motif) + frame)
+      out <- 0
+      outRev <- 0
+      for(i in 1:nchar(seq)){
+        base <- substr(seq, i,i)
+        if(base == 'N'){
+          out <- out + mean(motif[,i])
+        }else{
+          out <- out + motif[base,i]
+        }
+      }
+      if(reverseComplement){
+        for(i in 1:nchar(seq)){
+          base <- substr(seq, i,i)
+          if(base == 'N'){
+            outRev <- outRev + mean(revMotif[,i])
+          }else{
+            outRev <- outRev + revMotif[base,i]
+          }
+        }
+        frameEnergies <- c(frameEnergies, out, outRev)
+      }else{
+        frameEnergies <- c(frameEnergies, out)
+      }
+
+    }
+    if(additive){
+      output <- sum(exp(frameEnergies))
+    }else{
+      output <- max(frameEnergies)
+    }
+    scores <- c(scores, output)
+  }
+  return(scores)
+
+}
+
+#' RC motif
+#'
+#' Reverse Complement motif
+#' @param motif motif model
+#' @return The reverse complement of a motif
+#' @export
+RCmotif <- function(motif){
+  rcMotif <- motif[4:1,ncol(motif):1]
+  rownames(rcMotif) <- DNA()
+  return(rcMotif)
+}
+
+#' RC String
+#'
+#' Reverse Complement DNA String
+#' @param DNA DNA string
+#' @return The reverse complement of a DNA stirng
+#' @export
+RCDNA <- function(DNA){
+  splitDNA <- strsplit(DNA,'')[[1]]
+  revDNA <- splitDNA[length(splitDNA):1]
+  for(i in 1:length(revDNA)){
+    if(revDNA[i] == 'A'){
+      revDNA[i] <- 'T'
+    }else if(revDNA[i] == 'T'){
+      revDNA[i] <- 'A'
+    }else if(revDNA[i] == 'C'){
+      revDNA[i] <- 'G'
+    }else if(revDNA[i] == 'G'){
+      revDNA[i] <- 'C'
+    }
+  }
+  return(paste0(revDNA, collapse = ''))
+}
+
+#' Predict.ClosestSequence
+#'
+#' Predicting binding motif with ClosesSeqeunce method
+#' @param mono_motifs List of motifs that are input as frequency values (0-1 with highest of 1)
+#' @param Alignment The alignment resulted from concatAli
+#' @param testSeq The sequence to be predicted
+#' @return motif model of closest sequence prediction
+#' @export
+Predict.ClosestSequence <- function(mono_motifs, Alignment, testSeq){
+  maxStr <- Inf
+  predIndex <- 0
+  for(i in 1:nrow(Alignment)){
+    Str <- stringdist::stringdist(testSeq, Alignment$alignment[i])
+    if (Str < maxStr) {
+      maxStr <- Str
+      predIndex <- i
+    }
+  }
+  out <- mono_motifs[[predIndex]]
+  attr(out,'Similarity Distance') <- maxStr
+  return(out)
+}
+
+#' tetrahedron dddG
+#'
+#' Calculate dddG between two motifs with tetrahedron transformation
+#' @param motif1 motif model of mutant in frequency
+#' @param motif2 motif model of WT in frequency
+#' @return calculated dddG model
+#' @export
+get.dddG <- function(motif1, motif2){
+  predDiffTetra <- matrix2tetrahedron(motif1) - matrix2tetrahedron(motif2)
+  if(sum(predDiffTetra) == 0){
+    predDiffTetra[1] <- 0.01
+    mod <- TRUE
+  }else{
+    mod <- FALSE
+  }
+  predDiffMatrix <- tetrahedron2matrix(predDiffTetra)
+  predDiffMatrix[predDiffMatrix < 0.01] <- 0.01
+  rownames(predDiffMatrix) <- DNA()
+  if(mod){
+    predDiffMatrix[1,] <- 1
+  }
+  return(frequency2ddG(predDiffMatrix))
+}
+
