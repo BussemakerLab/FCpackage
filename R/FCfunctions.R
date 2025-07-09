@@ -444,6 +444,41 @@ AAcolor <- function(AAs){
   return(colors[AAs])
 }
 
+#' Amino Acid Symbols
+#'
+#' Get the symbol that represent the vector of amino acids.
+#' @param AAs Amino Acids to take
+#' @return vector of symbols for plotly
+#' @export
+AAsymbols <- function(AAs){
+  AA <- c('A','C','D','E','F','G','H','I','K','L','M','N','P','Q','R','S','T','V','W','X','Y','-')
+  colors <- c('circle',
+              'circle',
+              'circle',
+              'cross',
+              'circle',
+              'circle',
+              'circle',
+              'cross',
+              'cross',
+              'circle-open',
+              'circle',
+              'diamond',
+              'cross',
+              'circle-open',
+              'circle-open',
+              'circle',
+              'diamond',
+              'diamond',
+              'cross',
+              'circle',
+              'circle-open',
+              'circle'
+  )
+  names(colors) <- AA
+  return(colors[AAs])
+}
+
 #' Match Alignment and Motif
 #'
 #' Match the order of mono_motifs list and Alignment data frame
@@ -616,6 +651,254 @@ plot_tetrahedron <- function(posMatrix, base_colors = c('green','blue','orange',
   }
   options(warn = oldw)
   return(plot3D)
+}
+
+#' get vertex
+#'
+#' get the coordinates of a base vertex in a tetrahedron
+#' @param Base 1 of the 4 bases
+#' @return list of coordinates
+#' @export
+getVertex <- function(base){
+  bases <- matrix(data = c(1,1,1,1,-1,-1,-1,1,-1,-1,-1,1),
+                  nrow = 4, ncol = 3, byrow = TRUE)
+  bases <- as.data.frame(bases)
+  rownames(bases) <- c('A','C','G','T')
+  return(list(x = bases[base,1], y = bases[base,2], z = bases[base,3]))
+}
+
+#' Plot tetrahedron with customizable sample points
+#'
+#' Generate a tetrahedron representation system and plot all data samples at a given motif position
+#' @importFrom plotly add_text
+#' @param posMatrix Matrix of binding motifs in frequency measurements at a specific motif position, result of gene2pos()
+#' @param base_colors Color of bases at the vertexes
+#' @param size Size of base dots in the tetrahedron (vertex points)
+#' @param axis True to show axis
+#' @param label Show label of data points according to colnames of posMatrix
+#' @param color Color sample points according to AA identity, only when colnames of posMatrix are 1 letter AA identifiers
+#' @param vertex Show label of vertex
+#' @param alpha_vector Optional vector of alpha values (0-1) for sample points
+#' @param symbol_vector Optional vector of plotly symbol names for sample points
+#' @param size_vector Optional vector of sizes for sample points
+#' @return 3D Plotly plot
+#' @export
+plot_tetrahedron_new <- function(posMatrix, base_colors = c('green','blue','orange','red'),
+                             size = 5, axis = FALSE, label = F, color = F, color_vector = NULL, vertex = F,
+                             alpha_vector = NULL, symbol_vector = NULL, size_vector = NULL) {
+  oldw <- getOption("warn")
+  options(warn = -1)
+  JSON_matrix <- posMatrix
+  n_samples <- ncol(JSON_matrix)
+
+  if(color){
+    color_vector = NULL
+  }
+  # Validate vector lengths
+  if (!is.null(alpha_vector) && length(alpha_vector) != n_samples)
+    stop("alpha_vector length must match number of samples")
+  if (!is.null(symbol_vector) && length(symbol_vector) != n_samples)
+    stop("symbol_vector length must match number of samples")
+  if (!is.null(size_vector) && length(size_vector) != n_samples)
+    stop("size_vector length must match number of samples")
+  if (!is.null(color_vector) && length(color_vector) != n_samples)
+    stop("color_vector length must match number of samples")
+
+  if (is.null(color_vector)) {
+    resis <- unique(as.factor(colnames(JSON_matrix)))
+    resis <- as.character(levels(resis))
+    resiColors <- AAcolor(resis)
+  }else{
+    resiColors <- '#000000'
+  }
+
+
+  # Transform to 3D space
+  tetra_trans_matrix <- matrix(data = c(1,1,1,1,-1,-1,-1,1,-1,-1,-1,1),
+                               nrow = 4, ncol = 3, byrow = TRUE)
+  df <- normalize_sum1(t(JSON_matrix)) %*% tetra_trans_matrix
+  AAtype <- rownames(df)
+  df <- as.data.frame(df)
+  df <- cbind.data.frame(df, name = AAtype)
+
+  # Create color vector
+  colLen <- length(resiColors)
+  colorNum <- as.factor(df$name)
+  resiCol <- c()
+  for(i in 1:length(colorNum)){
+    index <- as.numeric(colorNum[i])%%colLen
+    if(index == 0){
+      index <- colLen
+    }
+    resiCol <- c(resiCol, resiColors[index])
+  }
+
+  # Create tetrahedron framework
+  tetrahedron <- matrix(data = c(1,1,1,1,-1,-1,-1,1,-1,-1,-1,1,1,1,1,-1,1,-1,1,-1,-1,-1,-1,1),
+                        nrow = 8, ncol = 3, byrow = TRUE)
+  tetrahedron <- as.data.frame(tetrahedron)
+  bases <- matrix(data = c(1,1,1,1,-1,-1,-1,1,-1,-1,-1,1),
+                  nrow = 4, ncol = 3, byrow = TRUE)
+  bases <- as.data.frame(bases)
+  base_names <- rownames(JSON_matrix)
+  len <- nrow(df)
+
+  # Set axis properties
+  axx <- list(
+    title = "",
+    zeroline = FALSE,
+    showline = FALSE,
+    showticklabels = FALSE,
+    showgrid = FALSE
+  )
+
+  # Initialize plot with explicit vector references
+  plot3D <- plot_ly() %>%
+    add_trace(
+      x = tetrahedron$V1,
+      y = tetrahedron$V2,
+      z = tetrahedron$V3,
+      color = I('blue'),
+      type = 'scatter3d',
+      mode = 'lines',
+      line = list(width = 1),
+      opacity = 0.5,
+      showlegend = F
+    ) %>%
+    add_trace(
+      x = bases$V1,
+      y = bases$V2,
+      z = bases$V3,
+      color = I(base_colors),
+      type = 'scatter3d',
+      mode = 'markers',
+      marker = list(size = size, opacity = 1),
+      showlegend = F
+    )
+
+  # Prepare sample properties
+  sample_size <- if (!is.null(size_vector)) size_vector else rep(size/2, len)
+  sample_alpha <- if (!is.null(alpha_vector)) alpha_vector else rep(0.8, len)
+  sample_symbol <- if (!is.null(symbol_vector)) symbol_vector else rep('circle', len)
+  sample_color <- if (!is.null(color_vector)) color_vector else resiCol
+
+  # Add sample points with explicit vector references
+  plot3D <- plot3D %>%
+    add_trace(
+      x = df$V1,
+      y = df$V2,
+      z = df$V3,
+      type = 'scatter3d',
+      mode = 'markers',
+      marker = list(
+        color = sample_color,
+        size = sample_size,
+        opacity = sample_alpha,
+        symbol = sample_symbol,
+        line = list(width = 0)
+      ),
+      showlegend = FALSE
+    )
+
+  # Add labels if requested
+  if (label) {
+    plot3D <- plot3D %>%
+      add_trace(
+        x = df$V1,
+        y = df$V2,
+        z = df$V3,
+        type = 'scatter3d',
+        mode = 'text',
+        text = df$name,
+        textposition = 'top',
+        textfont = list(color = 'grey', size = size*2),
+        opacity = 0.5,
+        showlegend = FALSE
+      )
+  }
+
+  # Add vertex labels if requested
+  if (vertex) {
+    plot3D <- plot3D %>%
+      add_text(
+        x = bases$V1,
+        y = bases$V2,
+        z = bases$V3,
+        text = c('A','C','G','T'),
+        color = I(base_colors),
+        textposition = 'top right',
+        textfont = list(family = "sans serif", size = size*3)
+      )
+  }
+
+  # Hide axis if requested
+  if (!axis) {
+    plot3D <- plot3D %>% layout(scene = list(xaxis = axx, yaxis = axx, zaxis = axx))
+  }
+
+  options(warn = oldw)
+  return(plot3D)
+}
+
+#' Create Legend for Tetrahedron Plot
+#'
+#' Generates a legend showing symbol and color for each sample in the tetrahedron plot
+#' @importFrom plotly plot_ly layout add_text
+#' @param sample_names Character vector of sample names (should match colnames of posMatrix)
+#' @param colors Vector of colors for each sample
+#' @param symbols Vector of plotly symbols for each sample
+#' @param point_size Size of legend symbols (default = 10)
+#' @param text_size Font size for sample labels (default = 12)
+#' @return Plotly legend object
+#' @export
+plot_tetrahedron_legend <- function(sample_names, colors, symbols, point_size = 10, text_size = 12) {
+  # Create data frame for legend items
+  n <- length(sample_names)
+  legend_df <- data.frame(
+    name = sample_names,
+    color = colors,
+    symbol = symbols,
+    y = rev(seq_len(n)),  # Position from top to bottom
+    stringsAsFactors = FALSE
+  )
+
+  # Create empty plot
+  legend_plot <- plot_ly() %>%
+    layout(
+      xaxis = list(showticklabels = FALSE, showgrid = FALSE, zeroline = FALSE, range = c(0, 3)),
+      yaxis = list(showticklabels = FALSE, showgrid = FALSE, zeroline = FALSE, range = c(0, n+1)),
+      showlegend = FALSE,
+      margin = list(l = 10, r = 10, b = 10, t = 10, pad = 4)
+    )
+
+  # Add symbols and text
+  legend_plot <- legend_plot %>%
+    add_trace(
+      data = legend_df,
+      x = 1,
+      y = ~y,
+      type = 'scatter',
+      mode = 'markers',
+      marker = list(
+        color = ~color,
+        symbol = ~symbol,
+        size = point_size,
+        line = list(width = 0)  # Remove symbol borders
+      ),
+      hoverinfo = 'text',
+      text = ~name,
+      showlegend = FALSE
+    ) %>%
+    add_text(
+      data = legend_df,
+      x = 1.5,
+      y = ~y,
+      text = ~name,
+      textfont = list(size = text_size),
+      showlegend = FALSE
+    )
+
+  return(legend_plot)
 }
 
 #' Find binding site
@@ -1014,7 +1297,7 @@ mononucleotide_logo <- function(matrix, type="energy", axes=TRUE, reverse=FALSE,
              ggplot2::geom_hline(yintercept = 0), alltheme)
 
       if (labels) {
-        plot <- plot + ggplot2::ylab(expression(paste('-',Delta, Delta, "G/RT")))
+        plot <- plot + ggplot2::ylab(expression(paste('–',Delta, Delta, "G/RT")))
       }
     }
 
@@ -2784,7 +3067,7 @@ Predict.ClosestSequence <- function(mono_motifs, Alignment, testSeq){
 #' @export
 get.dddG <- function(motif1, motif2){
   predDiffTetra <- matrix2tetrahedron(motif1) - matrix2tetrahedron(motif2)
-  if(sum(predDiffTetra) == 0){
+  if(sum(predDiffTetra) == 0 && sd(predDiffTetra) == 0){
     predDiffTetra[1] <- 0.01
     mod <- TRUE
   }else{
